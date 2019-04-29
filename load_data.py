@@ -1,0 +1,399 @@
+##############################################################################################
+# Utils to read ZIP archive that contains data, some preprocessing before Pytorch DataLoader #
+##############################################################################################
+
+import pandas as pd
+import warnings
+import zipfile
+import numpy as np
+from re import search
+from os import remove, chdir
+from os.path import split, splitext
+
+
+class DataProcesser:
+    """
+    Class for reading, subsetting and processing time-series data before passing to network
+    Attributes:
+        * archive_path :str: path to the data archive
+        * archive :zipfile: object containing the archive
+        * col_id :str: name of the column containing the series ID in .dataset and .id_set
+        * col_class :str: name of the column containing the series class in .dataset and .id_set
+        * col_set :str: name of the column containing the series set (training|validation|test) in .id_set
+        * dataset :DataFrame: observations (series) in rows, measurements in columns. Names of columns must have the format:
+         A_1, A_2, A_3,..., C_1, C_2,... where A and C are groups (sensors) and 1,2,3... measurement time
+        * id_set :DataFrame: IDs of training/validation/test.
+        * classes :DataFrame: Conversion table to go from dummy class name to actual one.
+        * logs :list: operations that were performed on the archive and stats for further preprocessing
+        * stats :dictionary: contains various stats in different sets (including mean of training set)
+        * train(validation|test)_set :DataFrame:
+        * flag_subset :boolean: whether .dataset has undergone subset operation
+        * flag_process :boolean: whether .dataset has undergone normalization
+        * flag_split :boolean: whether dataset was split
+    Example:
+        tmp=DataProcesser('/path/to/archive/myarchive.zip')
+        tmp.subset(['groupA', 'groupB'], 3 ,7)
+        tmp.process('center_train', independent_groups=True)
+        tmp.split_sets()
+        tmp.export_processed(compress=True)
+    """
+
+    def __init__(self, archive_path, col_id='ID', col_class='class', col_set='set', read_on_init=True):
+        self.archive_path = archive_path
+        self.archive = zipfile.ZipFile(self.archive_path, 'r')
+        self.col_id = col_id
+        self.col_class = col_class
+        self.col_set = col_set
+        self.dataset = None
+        self.id_set = None
+        self.classes = None
+        self.train_set = None
+        self.validation_set = None
+        self.test_set = None
+        self.logs = []
+        self.stats = None
+        self.flag_subset = False
+        self.flag_process = False
+        self.flag_split = False
+        if read_on_init:
+            self.read_archive()
+
+
+    def read_archive(self):
+        """
+        Read a zip archive, without extraction, than contains:
+
+        * data as .csv, observations in rows, measurements in columns. Names of columns must have the format:
+         A_1, A_2, A_3,..., C_1, C_2,... where A and C are groups (sensors) and 1,2,3... measurement time
+
+        * IDs of training/validation/test as .csv
+
+        * Explicit name of classes as .csv
+        :return: 2 pandas, one with raw data, one with IDs
+        """
+        self.dataset = pd.read_csv(self.archive.open('dataset.csv'))
+        self.id_set = pd.read_csv(self.archive.open('id_set.csv'))
+        self.classes = pd.read_csv(self.archive.open('classes.csv'))
+        self.check_datasets()
+        self.logs.append('Read archive: {0}'.format(self.archive_path))
+        return None
+
+
+    def check_datasets(self):
+        """
+        Check that there is at least one correct measurement in dataset, and values in set_ids.
+        :return:
+        """
+        numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+        colnames_dataset = list(self.dataset.columns.values)
+        colnames_dataset.remove(self.col_id)
+        colnames_dataset.remove(self.col_class)
+
+        if not self.col_id in self.dataset.columns.values:
+            warnings.warn('ID column is missing in dataset.')
+        if not self.col_id in self.id_set.columns.values:
+            warnings.warn('ID column is missing in id_set.')
+        if not self.col_class in self.dataset.columns.values:
+            warnings.warn('Class column not present in dataset.')
+        if not self.col_class in self.dataset.columns.values:
+            warnings.warn('Class column not present in classes.')
+        if not self.col_set in self.id_set.columns.values:
+            warnings.warn('Set column not present in id_set.')
+        if self.dataset.select_dtypes(numerics).empty:
+            warnings.warn('No numerical columns in dataset.')
+        if len(list(set(self.dataset[self.col_id]) - set(self.id_set[self.col_id]))) != 0 or len(list(set(self.id_set[self.col_id]) - set(self.dataset[self.col_id]))) != 0:
+            warnings.warn('ID list is different between dataset and id_set.')
+        if (not all([search('^\w+_', i) for i in colnames_dataset])) or (not all([search('_\d+$', i) for i in colnames_dataset])):
+            ill_col = [i for i in colnames_dataset if not search('^\w+_', i)]
+            ill_col += [i for i in colnames_dataset if not search('_\d+$', i)]
+            warnings.warn('At least some column names of dataset are ill-formatted. Should follow "Group_Time" format. '
+                          'List of ill-formatted: {0}'.format(ill_col))
+        if any(self.dataset[self.col_id].duplicated()):
+            warnings.warn('Found duplicated ID in "dataset".')
+        if any(self.id_set[self.col_id].duplicated()):
+            warnings.warn('Found duplicated ID in "id_set".')
+        return None
+
+
+    def subset(self, sel_groups, start_time, end_time):
+        """
+        Select only columns whose group matches and keep times within boundary
+        :return: replace self.dataset with the subset, along with ID column
+        """
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(self.col_id)
+        colnames.remove(self.col_class)
+        col_dict = {col:col.split(sep='_') for col in colnames}
+        # Subset if col prefix is a selected group and if col suffix is a selected time
+        sel_col = [col for col in col_dict
+                   if (col_dict[col][0] in sel_groups and
+                       int(col_dict[col][1]) in range(start_time, end_time+1))]
+        if len(sel_col) == 0:
+            raise ValueError('Empty columns subset')
+        self.dataset = self.dataset.loc[:, [self.col_id, self.col_class] + sel_col]
+        self.logs.append('Subset: groups:{0}, start_time:{1}, end_time:{2}'.format(sel_groups, start_time, end_time))
+        self.flag_subset = True
+        return None
+
+
+    def get_stats(self):
+        """
+        Get means, mins, maxs, sds... in different subset, different groups
+        :return:
+        """
+        if self.flag_process:
+            warnings.warn('data were already processed. Stats will be extracted from the processed data, not the '
+                          'original data.')
+        if not self.flag_subset:
+            warnings.warn('Stats are extracted before subset. Subset groups or times will affect the stats.')
+
+        # Different groups of measurements
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(self.col_id)
+        colnames.remove(self.col_class)
+        groups = set([i.split('_')[0] for i in colnames])
+        groups = list(groups)
+
+        # Initialize all dictionaries;
+        # {'mu':{'groups_combined', 'groupA', 'groupB'}, 'sd':{'groups_combined', 'groupA', 'groupB'}, ...}
+        stats = ['mu', 'sd', 'mini', 'maxi']
+        self.stats = {k1:{k2:{k3:{} for k3 in ['global', 'train']} for k2 in groups+['groups_combined']} for k1 in stats}
+
+        # Consider all channels as one single measurement
+        ## Global
+        # Convert to array otherwise mean can only be row or column-wise
+        groups_combined = np.array(self.dataset.drop([self.col_id, self.col_class], axis=1))
+        self.stats['mu']['groups_combined']['global'] = groups_combined.mean()
+        self.stats['sd']['groups_combined']['global'] = groups_combined.std()
+        self.stats['mini']['groups_combined']['global'] = groups_combined.min()
+        self.stats['maxi']['groups_combined']['global'] = groups_combined.max()
+        del groups_combined
+        ## Training set only
+        groups_combined_train = pd.merge(self.dataset, self.id_set, on=self.col_id)
+        groups_combined_train = np.array(
+            groups_combined_train[groups_combined_train[self.col_set] == 'train'].drop([self.col_id, self.col_class, self.col_set], axis=1))
+        self.stats['mu']['groups_combined']['train'] = groups_combined_train.mean()
+        self.stats['sd']['groups_combined']['train'] = groups_combined_train.std()
+        self.stats['mini']['groups_combined']['train'] = groups_combined_train.min()
+        self.stats['maxi']['groups_combined']['train'] = groups_combined_train.max()
+
+        # Extract statistics independently for each channel
+        for group in groups:
+            group_columns = [i for i in colnames if search('^{0}_'.format(group), i)]
+            ## Global
+            # Class and ID columns are already excluded here
+            group_array = np.array(self.dataset[group_columns])
+            self.stats['mu'][group]['global'] = group_array.mean()
+            self.stats['sd'][group]['global'] = group_array.std()
+            self.stats['mini'][group]['global'] = group_array.min()
+            self.stats['maxi'][group]['global'] = group_array.max()
+            del group_array
+            ## Training set only
+            group_array_train = pd.merge(self.dataset, self.id_set, on=self.col_id)
+            group_array_train = group_array_train[group_array_train[self.col_set] == 'train']
+            group_array_train = np.array(group_array_train[group_columns])
+            self.stats['mu'][group]['train'] = group_array_train.mean()
+            self.stats['sd'][group]['train'] = group_array_train.std()
+            self.stats['mini'][group]['train'] = group_array_train.min()
+            self.stats['maxi'][group]['train'] = group_array_train.max()
+            del group_array_train
+
+        return None
+
+
+    def process(self, method, independent_groups=True):
+        """
+        Process data for neural network.
+        :param independent_groups :boolean: Whether operations should be applied independantly on each group.
+        :param method :str:
+          * center: x - mean(x)
+          * zscore: (x - mean(x))/sd(x)
+          * squeeze01: (x-min(x))/(max(x)-min(x))
+          The second part of the method determines where statistics are taken from:
+
+          * train: use all training data
+          * global: use all data (training+validation+test)
+          * individual: perform operation series by series
+        :return: Modifies .dataset in-place and returns info about process (mean train...)
+        """
+        methods = ['center_train', 'center_global', 'center_individual',
+                   'zscore_train', 'zscore_global', 'zscore_individual',
+                   'squeeze01_train', 'squeeze01_global', 'squeeze01_individual']
+
+        if not method in methods:
+            raise ValueError('Invalid method, must be one of: {0}'.format(methods))
+        if not self.flag_subset:
+            warnings.warn('Data were not subset.')
+        if self.flag_split:
+            warnings.warn(
+                'Data were already split, split will not contain process. Call .split_sets() again to overwrite.')
+        if self.stats is None:
+            raise ValueError('Statistics were not extracted. Use get_stats() prior to process().')
+
+        # Build unique groups dictionary {'A':['A_1', 'A_2], 'B':['B_1', 'B_2']}
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(self.col_id)
+        colnames.remove(self.col_class)
+        groups = set([i.split('_')[0] for i in colnames])
+        groups = list(groups)
+        groups_dict = {}
+        for group in groups:
+            groups_dict[group] = [i for i in colnames if search('^{0}_'.format(group), i)]
+
+        operation, second_group = method.split('_')
+        # Temporary add set split for grouping operations that involve extracting training set statistics
+        if second_group == 'train':
+            self.dataset = pd.merge(self.dataset, self.id_set, on=self.col_id)
+
+        # Extract statistics independently for each channel
+        if independent_groups:
+            # Store after each group has been processed and stitch back together to obtain dataset of original size
+            processed_groups = []
+            for group in groups_dict.keys():
+                # Dataframe with measurements (numerical) only for the current group
+                current_group = self.dataset[groups_dict[group]]
+
+                if second_group == 'global':
+                    mu = self.stats['mu'][group]['global']
+                    sd = self.stats['sd'][group]['global']
+                    mini = self.stats['mini'][group]['global']
+                    maxi = self.stats['maxi'][group]['global']
+                    self.logs.append(
+                        'Global stats group {}; mu:{}; sd:{}; mini:{}; maxi:{}'.format(group, mu, sd, mini, maxi))
+
+                if second_group == 'train':
+                    mu = self.stats['mu'][group]['train']
+                    sd = self.stats['sd'][group]['train']
+                    mini = self.stats['mini'][group]['train']
+                    maxi = self.stats['maxi'][group]['train']
+                    self.logs.append(
+                        'Train set stats group {}; mu:{}; sd:{}; mini:{}; maxi:{}'.format(group, mu, sd, mini, maxi))
+
+                if second_group == 'individual':
+                    h, w = current_group.shape
+                    mu = np.array(current_group.apply(np.mean, axis=1))
+                    mu = np.tile(mu.reshape((h, 1)), (1, w))
+                    sd = np.array(current_group.apply(np.std, axis=1))
+                    sd = np.tile(sd.reshape((h, 1)), (1, w))
+                    mini = np.array(current_group.apply(np.min, axis=1))
+                    mini = np.tile(mini.reshape((h, 1)), (1, w))
+                    maxi = np.array(current_group.apply(np.max, axis=1))
+                    maxi = np.tile(maxi.reshape((h, 1)), (1, w))
+
+                if operation == 'center':
+                    current_group -= mu
+                elif operation == 'zscore':
+                    current_group = (current_group - mu) / sd
+                elif operation == 'squeeze01':
+                    current_group = (current_group - mini) / (maxi - mini)
+
+                processed_groups.append(current_group)
+            # Stitch back together the processed groups with ID and class
+            processed_groups = [pd.DataFrame(self.dataset[[self.col_id, self.col_class]])] + processed_groups
+            self.dataset = pd.concat(processed_groups, axis=1)
+
+        # Consider all channels as one single measurement
+        else:
+            if second_group == 'global':
+                mu = self.stats['mu']['groups_combined']['global']
+                sd = self.stats['sd']['groups_combined']['global']
+                mini = self.stats['mini']['groups_combined']['global']
+                maxi = self.stats['maxi']['groups_combined']['global']
+                self.logs.append(
+                    'Global stats; mu:{}; sd:{}; mini:{}; maxi:{}'.format(mu, sd, mini, maxi))
+
+            if second_group == 'train':
+                mu = self.stats['mu']['groups_combined']['train']
+                sd = self.stats['sd']['groups_combined']['train']
+                mini = self.stats['mini']['groups_combined']['train']
+                maxi = self.stats['maxi']['groups_combined']['train']
+                self.logs.append(
+                    'Global stats; mu:{}; sd:{}; mini:{}; maxi:{}'.format(mu, sd, mini, maxi))
+
+            if second_group == 'individual':
+                # Dataframe with measurements (numerical) only
+                measurements_df = self.dataset.drop([self.col_id, self.col_class], axis=1)
+                h,w = measurements_df.shape
+                mu = np.array(measurements_df.apply(np.mean, axis=1))
+                mu = np.tile(mu.reshape((h, 1)), (1, w))
+                sd = np.array(measurements_df.apply(np.std, axis=1))
+                sd = np.tile(sd.reshape((h, 1)), (1, w))
+                mini = np.array(measurements_df.apply(np.min, axis=1))
+                mini = np.tile(mini.reshape((h, 1)), (1, w))
+                maxi = np.array(measurements_df.apply(np.max, axis=1))
+                maxi = np.tile(maxi.reshape((h, 1)), (1, w))
+
+            if operation == 'center':
+                self.dataset.loc[:, list(set(self.dataset.columns) - set([self.col_id, self.col_class]))] -= mu
+            elif operation == 'zscore':
+                self.dataset.loc[:, list(set(self.dataset.columns) - set([self.col_id, self.col_class]))] -= mu
+                self.dataset.loc[:, list(set(self.dataset.columns) - set([self.col_id, self.col_class]))] /= sd
+            elif operation == 'squeeze01':
+                self.dataset.loc[:, list(set(self.dataset.columns) - set([self.col_id, self.col_class]))] -= mini
+                self.dataset.loc[:, list(set(self.dataset.columns) - set([self.col_id, self.col_class]))] /= (maxi-mini)
+
+        self.logs.append('Process: method:{0}, indep_groups:{1}'.format(method, independent_groups))
+        self.flag_process = True
+        return None
+
+
+    def split_sets(self):
+        """
+        Split dataset in train, validation, test according to id_split. Not memory efficient because Copies not views!
+        :return: 3 pandas, one for each set
+        """
+        if not self.flag_subset:
+            warnings.warn('Data were not subset.')
+        if not self.flag_process:
+            warnings.warn('Data were not processed.')
+        ids_train = list(self.id_set[self.id_set[self.col_set] == 'train'][self.col_id])
+        ids_validation = list(self.id_set[self.id_set[self.col_set] == 'validation'][self.col_id])
+        ids_test = list(self.id_set[self.id_set[self.col_set] == 'test'][self.col_id])
+
+        self.train_set = self.dataset[self.dataset[self.col_id].isin(ids_train)]
+        self.validation_set = self.dataset[self.dataset[self.col_id].isin(ids_validation)]
+        self.test_set = self.dataset[self.dataset[self.col_id].isin(ids_test)]
+
+        self.flag_split = True
+        return None
+
+
+    def export_processed(self, compress=True, out_path=None, export_process_info=True):
+        """
+        Export the processed data, either as zipped or 3 csv files
+
+        :param compressed: boolean, if True return a zip archive, else returns 3 csv files.
+        :param out_path: string, default to archive_path.
+        :param export_process_info: boolean, whether to export processing info in .txt file
+        :return:
+        """
+        if not self.flag_split:
+            raise AttributeError('Data were not split. Run first self.split_sets()')
+        if out_path is None:
+            out_path = splitext(self.archive_path)[0] # split extension
+
+        # If compressed, write csv, add to zip archive and delete
+        self.train_set.to_csv(out_path + '_train.csv', index=False)
+        self.validation_set.to_csv(out_path + '_validation.csv', index=False)
+        self.test_set.to_csv(out_path + '_test.csv', index=False)
+        if export_process_info:
+            with open(out_path + '_process_info.txt', 'w') as f:
+                for log in self.logs:
+                    f.write(log + '\n')
+
+        if compress:
+            with zipfile.ZipFile(out_path + "_DataProcesser.zip", mode='w') as zipMe:
+                lfile = [out_path + i for i in ['_train.csv', '_validation.csv', '_test.csv']]
+                if export_process_info:
+                    lfile.append(out_path + '_process_info.txt')
+                for file in lfile:
+                    # Remove all path before file to avoid it being exported in the archive
+                    path, filename = split(file)
+                    chdir(path)
+                    zipMe.write(filename, compress_type=zipfile.ZIP_DEFLATED)
+                    remove(file)
+        return None
+
+
+# Example
+# myProc = DataProcesser('/home/marc/Dropbox/Work/TSclass/data/paolo/KTR_FOX_DMSO_noEGF_len120_7repl.zip')
