@@ -1,0 +1,211 @@
+---
+title: "Growth Factor dataset - Cleaning and Preprocessing"
+author: "Jacques Marc-Antoine"
+date: "April 26, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages
+```{r message=FALSE}
+library(data.table)
+library(ggplot2)
+library(imputeTS)
+library(stringr)
+```
+
+## Load data,  and interpolate NA
+```{r}
+dt <- fread("unzip -cq ./data/raw_dt.csv.zip", nThread = 4)
+dt_desc <- fread("data/experiment_description.csv")
+
+dt[, Well := str_extract(track_id_uni, "^[A-Z][0-9]")]
+dt[, Ratio_ERK := objCytoRing_Intensity_MeanIntensity_imKTR/objNuclei_Intensity_MeanIntensity_imKTR]
+dt[, Ratio_AKT := objCytoRing_Intensity_MeanIntensity_imFOX/objNuclei_Intensity_MeanIntensity_imFOX]
+
+dt[, Ratio_ERK := na.interpolation(Ratio_ERK), by = "track_id_uni"]
+dt[, Ratio_AKT := na.interpolation(Ratio_AKT), by = "track_id_uni"]
+
+dt_desc[, Stimulation := str_replace(Stimulation, "-100ngml", "")]
+setnames(dt, c("track_id_uni", "Image_Metadata_T"), c("Uniq", "Time"))
+```
+
+## Length of series
+```{r}
+dt_len <- dt[, .(len = nrow(.SD)), by=Uniq]
+dt_len[, Well := str_extract(Uniq, "^[A-Z][0-9]")]
+```
+
+Make a shiny widget to see how much data are discarded with a hard threshold on length.
+```{r echo=FALSE}
+clip_length <- function(dataset) { 
+  require(shiny)
+  # Return percentage of elements with values higher than threshold
+  FUNpercTraj <- function(vec, threshold){
+    out <- 100*round(sum(vec >= threshold) / length(vec), 3)
+    return(out)
+  }
+  # Return number of elements with values higher than threshold
+  FUNnTraj <- function(vec, threshold){
+    out <- sum(vec >= threshold)
+    return(out)
+  }
+  # Return summed values of elements with values higher than threshold
+  FUNpercPoints <- function(vec, threshold){
+    out <- 100*round(sum(vec[vec >= threshold]) / sum(vec), 3)
+    return(out)
+  }
+  
+  shinyApp(
+    ui = fluidPage(
+      fluidRow(style = "padding-bottom: 20px;",
+        column(4, selectInput('ycol', 'Length Variable', names(dataset),
+                              selected=names(dataset)[[2]])),
+        column(4, selectInput('groupcol', 'Group Variable', names(dataset),
+                      selected=names(dataset)[[3]])),
+        column(4, sliderInput('len', 'Threshold length', value = 240,
+                               min = 1, max = 600, step = 1))
+      ),
+      fluidRow(
+        plotOutput('histo', height = "400px"),
+        textOutput("perc_traj"),
+        textOutput("perc_points"),
+        tableOutput("perc_table")
+      )
+    ),
+    
+    server = function(input, output, session) {
+      # Table with number of kept trajectories/points per Well
+      percTable <- reactive({
+        percdt <- dataset[, .(NberKept_traj = FUNnTraj(get(input$ycol), input$len),
+                              PercKept_traj = FUNpercTraj(get(input$ycol), input$len),
+                              PercKept_points = FUNpercPoints(get(input$ycol), input$len)),
+                          by = c(input$groupcol)]
+        return(percdt)
+      })
+      
+      # Percentage of kept trajectories
+      percTraj <- reactive({
+        FUNpercTraj(dataset[, get(input$ycol)], input$len)
+      })
+      # Percentage of kept datapoints
+      percPoints <- reactive({
+        FUNpercPoints(dataset[, get(input$ycol)], input$len)
+      })
+      
+      output$histo <- renderPlot(height = 400, {
+        par(mar = c(5.1, 4.1, 0, 1))
+        hist(dataset[, get(input$ycol)], xlab = "Length of series", ylab = "Count of series", main = "")
+        abline(v=input$len, col = "red", lwd = 2, lty = "dashed")
+      })
+      
+      output$perc_traj <- renderText({
+        paste("Percentage of kept trajectories:", percTraj(), "%")
+      })
+      
+      output$perc_points <- renderText({
+        paste("Percentage of kept time points:", percPoints(), "%")
+      })
+
+      output$perc_table <- renderTable({
+        percTable()
+      })
+    },
+    
+    options = list(height = 800)
+  )
+}
+```
+
+```{r}
+clip_length(dt_len)
+```
+
+Set the threshold:
+```{r}
+len_threshold <- 240
+```
+
+
+## Plot sample
+```{r out.width = "100%", echo=FALSE}
+ids_to_keep <- dt[Uniq %in% dt_len[len >= len_threshold, Uniq], sample(unique(Uniq), size = 7), by = Well]$V1
+cols_to_exclude <- names(dt)[str_detect(names(dt), "^obj")]
+
+dt_plot <- dt[Uniq %in% ids_to_keep, setdiff(names(dt), cols_to_exclude), with = FALSE]
+temp <- dt_plot[, .(Uniq=unique(Uniq)), by = Well][, .(Uniq, dummy_traj_number=seq(1:nrow(.SD))), by = Well]
+dt_plot <- merge(dt_plot, temp, by=c("Well", "Uniq"))
+dt_plot <- merge(dt_plot, dt_desc[, .(Well, Stimulation)], by="Well")
+
+dt_plot[, Stimulation := factor(Stimulation, levels = c("Ctrl", "IGF1", "HeregulinB1", "HGF", "Betacellulin", "Epiregulin", "EGF"))]
+dt_plot[, dummy_traj_number := as.factor(dummy_traj_number)]
+
+ggplot(dt_plot, aes(x=Time, y=Ratio_ERK)) +
+  geom_line(aes(group=Uniq, col=dummy_traj_number)) +
+  facet_wrap("Stimulation", ncol = 2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_brewer(palette="Set1") +
+  ggtitle("ERK activity")
+
+ggplot(dt_plot, aes(x=Time, y=Ratio_AKT)) +
+  geom_line(aes(group=Uniq, col=dummy_traj_number)) +
+  facet_wrap("Stimulation", ncol = 2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_brewer(palette="Set1") +
+  ggtitle("AKT activity")
+```
+
+## Possible extra steps
+
+* Trim out early response to GF: actually rather short in comparison to the whole series with length 240... (at least for ERK)
+
+* Remove cells with low sensor expression: apparently very few
+
+* Keep frames where mean sensor activity overall is stable: too restrictive?
+
+
+## Export
+
+Export with suitable format for CNN training. Comports 3 files: dataset (wide format), table with classes, table with splitting training, validation, test set.
+```{r eval=FALSE}
+# Cast to wide with proper column names
+dt_export <- dt[Uniq %in% dt_len[len >= len_threshold, Uniq], .(Uniq, Well, Time, Ratio_ERK, Ratio_AKT)]
+dt_export <- dcast(dt_export, Uniq + Well ~ Time, value.var = c("Ratio_ERK", "Ratio_AKT"))
+colnames(dt_export) <- str_replace(colnames(dt_export), "Ratio_", "")
+setnames(dt_export, c("Uniq", "Well"), c("ID", "class"))
+
+# Dummy code the classes with integer (required by Pytorch), store code in a DT
+dt_classes <- data.table(class_ID = 0:(length(unique(dt_export$class)) - 1),
+                         class = unique(dt_export$class))
+dt_export <- merge(dt_export, dt_classes, by="class")
+dt_export[, c("class", "class_ID") := .(class_ID, NULL)]
+setcolorder(dt_export, c("ID", "class"))
+
+dt_classes <- merge(dt_classes, dt_desc[, .(Well, Stimulation)], by.x = "class", by.y = "Well")
+dt_classes[, c("class", "Stimulation") := .(Stimulation, NULL)]
+setcolorder(dt_classes, c("class_ID", "class"))
+
+# Split in train/validation/test sets
+train_ids <- sample(dt_export$ID, round(0.7*nrow(dt_export)), replace = F)
+valid_ids <- sample(setdiff(dt_export$ID, train_ids), round(0.2*nrow(dt_export)), replace = F)
+tests_ids <- sample(dt_export[!ID %in% c(train_ids, valid_ids), ID])
+# Checks
+paste("There is", sum(duplicated(c(train_ids, valid_ids, tests_ids))), "overlap between the sets")
+paste("The number of unique IDs in the three sets is equal to the total number of IDs:",
+      length(unique(c(train_ids, valid_ids, tests_ids))) == nrow(dt_export))
+dt_sets <- data.table(ID = c(train_ids, valid_ids, tests_ids),
+                      set = rep(c("train", "validation", "test"),
+                                times = unlist(lapply(list(train_ids, valid_ids, tests_ids), length))))
+
+# Export
+fwrite(dt_export, "data/toZip/dataset.csv", na = "NA")
+fwrite(dt_classes, "data/toZip/classes.csv", na = "NA")
+fwrite(dt_sets, "data/toZip/id_set.csv", na = "NA")
+```
+
+
