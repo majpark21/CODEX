@@ -191,18 +191,26 @@ class RandomCrop(object):
 
     Args:
         output_size (int): Desired output size.
+        ignore_na_tails (bool): If input has NA borders, ignore and crop in central region without NA.
     """
 
-    def __init__(self, output_size):
+    def __init__(self, output_size, ignore_na_tails=True):
         assert isinstance(output_size, int)
         self.output_size = output_size
+        self.ignore_na_tails = ignore_na_tails
 
     def __call__(self, sample):
         series, label, identifier = sample['series'], sample['label'], sample['identifier']
         length = len(series)
         new_length = self.output_size
 
-        left = np.random.randint(0, length - new_length)
+        if self.ignore_na_tails:
+            pos_non_na = np.where(~np.isnan(series))
+            start = pos_non_na[0][0]
+            end = pos_non_na[0][-1]
+            left = np.random.randint(start, end - new_length + 2)  # +1 to include last in randint; +1 for slction span
+        else:
+            left = np.random.randint(0, length - new_length)
         series = series[left: left + new_length]
 
         return {'series': series,

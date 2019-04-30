@@ -11,22 +11,22 @@ class ConvNetCam(nn.Module):
         self.length = length
 
         self.features = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=20, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm1d(20),
+            nn.Conv1d(in_channels=1, out_channels=60, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm1d(60),
             nn.ReLU(True),
-            nn.Conv1d(in_channels=20, out_channels=20, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm1d(20),
+            nn.Conv1d(in_channels=60, out_channels=50, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm1d(50),
             nn.ReLU(True),
-            nn.Conv1d(in_channels=20, out_channels=20, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm1d(20),
+            nn.Conv1d(in_channels=50, out_channels=40, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm1d(40),
             nn.ReLU(True),
-            nn.Conv1d(in_channels=20, out_channels=20, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm1d(20),
+            nn.Conv1d(in_channels=40, out_channels=30, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm1d(30),
             nn.ReLU(True),
-            nn.Conv1d(in_channels=20, out_channels=20, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(20),
+            nn.Conv1d(in_channels=30, out_channels=30, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(30),
             nn.ReLU(True),
-            nn.Conv1d(in_channels=20, out_channels=nfeatures, kernel_size=3, stride=1, padding=1),
+            nn.Conv1d(in_channels=30, out_channels=nfeatures, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm1d(nfeatures),
             nn.ReLU(True)
         )

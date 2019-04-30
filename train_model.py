@@ -1,6 +1,7 @@
 ###############################################################
 # Train CNN for classification, output logs with tensorboardX #
 ###############################################################
+#TODO: Use FixedCrop for test loader, ignore na_tails
 
 import torch
 import numpy as np
@@ -17,14 +18,14 @@ import zipfile
 import time
 
 # %% Hyperparameters
-nepochs = 20
+nepochs = 1000
 myseed = 42
 torch.manual_seed(myseed)
 
 batch_size = 128
-length = 120
+length = 200
 nclass = 7
-nfeatures = 20
+nfeatures = 30
 lr = 1e-2
 
 # %% Load and process Data
@@ -36,12 +37,13 @@ data.get_stats()
 # data.process(method='center_train', independent_groups=True)
 data.split_sets()
 data_train = myDataset(dataset=data.train_set, transform=transforms.Compose([
-    RandomCrop(output_size=length),
+    RandomCrop(output_size=length, ignore_na_tails=True),
     transforms.RandomApply([RandomNoise(mu=0, sigma=0.02)]),
     Subtract(data.stats['mu'][meas_var]['train']),
     ToTensor()
 ]))
 data_test = myDataset(dataset=data.validation_set, transform=transforms.Compose([
+    RandomCrop(output_size=length, ignore_na_tails=True),
     Subtract(data.stats['mu'][meas_var]['train']),
     ToTensor()
 ]))
@@ -56,6 +58,7 @@ writer = SummaryWriter(logs_str)
 save_model = 'models/' + logs_str.lstrip('logs/').rstrip('/') + '.pytorch'
 
 
+#%%
 def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=load_model,
                save_model=save_model, logs=True, save_pyfiles=True, lr=lr):
     # ------------------------------------------------------------------------------------------------------------------

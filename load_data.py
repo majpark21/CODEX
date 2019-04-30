@@ -163,19 +163,19 @@ class DataProcesser:
         ## Global
         # Convert to array otherwise mean can only be row or column-wise
         groups_combined = np.array(self.dataset.drop([self.col_id, self.col_class], axis=1))
-        self.stats['mu']['groups_combined']['global'] = groups_combined.mean()
-        self.stats['sd']['groups_combined']['global'] = groups_combined.std()
-        self.stats['mini']['groups_combined']['global'] = groups_combined.min()
-        self.stats['maxi']['groups_combined']['global'] = groups_combined.max()
+        self.stats['mu']['groups_combined']['global'] = np.nanmean(groups_combined)
+        self.stats['sd']['groups_combined']['global'] = np.nanstd(groups_combined)
+        self.stats['mini']['groups_combined']['global'] = np.nanmin(groups_combined)
+        self.stats['maxi']['groups_combined']['global'] = np.nanmax(groups_combined)
         del groups_combined
         ## Training set only
         groups_combined_train = pd.merge(self.dataset, self.id_set, on=self.col_id)
         groups_combined_train = np.array(
             groups_combined_train[groups_combined_train[self.col_set] == 'train'].drop([self.col_id, self.col_class, self.col_set], axis=1))
-        self.stats['mu']['groups_combined']['train'] = groups_combined_train.mean()
-        self.stats['sd']['groups_combined']['train'] = groups_combined_train.std()
-        self.stats['mini']['groups_combined']['train'] = groups_combined_train.min()
-        self.stats['maxi']['groups_combined']['train'] = groups_combined_train.max()
+        self.stats['mu']['groups_combined']['train'] = np.nanmean(groups_combined_train)
+        self.stats['sd']['groups_combined']['train'] = np.nanstd(groups_combined_train)
+        self.stats['mini']['groups_combined']['train'] = np.nanmin(groups_combined_train)
+        self.stats['maxi']['groups_combined']['train'] = np.nanmax(groups_combined_train)
 
         # Extract statistics independently for each channel
         for group in groups:
@@ -183,19 +183,19 @@ class DataProcesser:
             ## Global
             # Class and ID columns are already excluded here
             group_array = np.array(self.dataset[group_columns])
-            self.stats['mu'][group]['global'] = group_array.mean()
-            self.stats['sd'][group]['global'] = group_array.std()
-            self.stats['mini'][group]['global'] = group_array.min()
-            self.stats['maxi'][group]['global'] = group_array.max()
+            self.stats['mu'][group]['global'] = np.nanmean(group_array)
+            self.stats['sd'][group]['global'] = np.nanstd(group_array)
+            self.stats['mini'][group]['global'] = np.nanmin(group_array)
+            self.stats['maxi'][group]['global'] = np.nanmax(group_array)
             del group_array
             ## Training set only
             group_array_train = pd.merge(self.dataset, self.id_set, on=self.col_id)
             group_array_train = group_array_train[group_array_train[self.col_set] == 'train']
             group_array_train = np.array(group_array_train[group_columns])
-            self.stats['mu'][group]['train'] = group_array_train.mean()
-            self.stats['sd'][group]['train'] = group_array_train.std()
-            self.stats['mini'][group]['train'] = group_array_train.min()
-            self.stats['maxi'][group]['train'] = group_array_train.max()
+            self.stats['mu'][group]['train'] = np.nanmean(group_array_train)
+            self.stats['sd'][group]['train'] = np.nanstd(group_array_train)
+            self.stats['mini'][group]['train'] = np.nanmin(group_array_train)
+            self.stats['maxi'][group]['train'] = np.nanmax(group_array_train)
             del group_array_train
 
         return None
