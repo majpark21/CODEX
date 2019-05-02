@@ -18,14 +18,14 @@ import zipfile
 import time
 
 # %% Hyperparameters
-nepochs = 1000
+nepochs = 10
 myseed = 42
 torch.manual_seed(myseed)
 
 batch_size = 128
 length = 200
 nclass = 7
-nfeatures = 30
+nfeatures = 20
 lr = 1e-2
 
 # %% Load and process Data
@@ -70,9 +70,9 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
     model.double()
     if cuda_available:
         model = model.cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999))
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-3)
     criterion = torch.nn.CrossEntropyLoss()
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 400, 900, 1500], gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[400, 600, 800, 1750], gamma=0.5)
     top1 = AverageMeter()
     top2 = AverageMeter()
 
@@ -158,6 +158,7 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
             writer.add_scalar('MeanEpoch/Val_Loss', np.mean(loss_eval), epoch)
             writer.add_scalar('MeanEpoch/Val_Top1', top1.avg, epoch)
             writer.add_scalar('MeanEpoch/Val_Top2', top2.avg, epoch)
+
 
         print('===>>>\t'
               'Prec@1 ({top1.avg.data:.3f})\t'
