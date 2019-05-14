@@ -6,10 +6,12 @@ import pandas as pd
 import warnings
 import zipfile
 import numpy as np
+from copy import copy
 from re import search
 from os import remove, chdir
 from os.path import split, splitext
 
+#Todo: opimize and add independant groups to randomcrop
 
 class DataProcesser:
     """
@@ -22,6 +24,7 @@ class DataProcesser:
         * col_set :str: name of the column containing the series set (training|validation|test) in .id_set
         * dataset :DataFrame: observations (series) in rows, measurements in columns. Names of columns must have the format:
          A_1, A_2, A_3,..., C_1, C_2,... where A and C are groups (sensors) and 1,2,3... measurement time
+        * dataset_cropped :DataFrame: cropped dataset if crop_random() method is called
         * id_set :DataFrame: IDs of training/validation/test.
         * classes :DataFrame: Conversion table to go from dummy class name to actual one.
         * logs :list: operations that were performed on the archive and stats for further preprocessing
@@ -45,6 +48,7 @@ class DataProcesser:
         self.col_class = col_class
         self.col_set = col_set
         self.dataset = None
+        self.dataset_cropped = None
         self.id_set = None
         self.classes = None
         self.train_set = None
@@ -337,22 +341,63 @@ class DataProcesser:
         return None
 
 
-    def split_sets(self):
+#Todo: add groups
+    def crop_random(self, output_length, ignore_na_tails=True, independant_groups=True):
+        """
+        Returns a random subset of each row. Useful to get rid of NA tails
+        :param output_size: length of each new series
+        :param ignore_na_tails: whether to ignore NA tails from subset
+        :return: Creates .dataset_cropped
+        """
+        newcols = ['X_' + str(i) for i in range(output_length)]
+        self.dataset_cropped = pd.DataFrame(index = self.dataset.index,
+                                            columns=[self.col_id, self.col_class]+newcols)
+        self.dataset_cropped[self.col_id] = self.dataset[self.col_id]
+        self.dataset_cropped[self.col_class] = self.dataset[self.col_class]
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(self.col_id)
+        colnames.remove(self.col_class)
+        for irow in range(self.dataset.shape[0]):
+            series = copy(self.dataset.iloc[irow, :])
+            series = np.array(series.loc[colnames]).astype('float')
+            length = len(series)
+            if ignore_na_tails:
+                pos_non_na = np.where(~np.isnan(series))
+                start = pos_non_na[0][0]
+                end = pos_non_na[0][-1]
+                left = np.random.randint(start,
+                                         end - output_length + 2)  # +1 to include last in randint; +1 for slction span
+            else:
+                left = np.random.randint(0, length - output_length)
+            series = series[left: left + output_length]
+            self.dataset_cropped.iloc[irow, 2:] = series
+        return None
+
+
+    def split_sets(self, which='dataset'):
         """
         Split dataset in train, validation, test according to id_split. Not memory efficient because Copies not views!
+
         :return: 3 pandas, one for each set
         """
         if not self.flag_subset:
             warnings.warn('Data were not subset.')
         if not self.flag_process:
             warnings.warn('Data were not processed.')
+        if not which in ['dataset', 'dataset_cropped']:
+            raise ValueError('which must be one of ["dataset", "dataset_cropped]')
         ids_train = list(self.id_set[self.id_set[self.col_set] == 'train'][self.col_id])
         ids_validation = list(self.id_set[self.id_set[self.col_set] == 'validation'][self.col_id])
         ids_test = list(self.id_set[self.id_set[self.col_set] == 'test'][self.col_id])
 
-        self.train_set = self.dataset[self.dataset[self.col_id].isin(ids_train)]
-        self.validation_set = self.dataset[self.dataset[self.col_id].isin(ids_validation)]
-        self.test_set = self.dataset[self.dataset[self.col_id].isin(ids_test)]
+        if which == 'dataset':
+            self.train_set = self.dataset[self.dataset[self.col_id].isin(ids_train)]
+            self.validation_set = self.dataset[self.dataset[self.col_id].isin(ids_validation)]
+            self.test_set = self.dataset[self.dataset[self.col_id].isin(ids_test)]
+        elif which == 'dataset_cropped':
+            self.train_set = self.dataset_cropped[self.dataset_cropped[self.col_id].isin(ids_train)]
+            self.validation_set = self.dataset_cropped[self.dataset_cropped[self.col_id].isin(ids_validation)]
+            self.test_set = self.dataset_cropped[self.dataset_cropped[self.col_id].isin(ids_test)]
 
         self.flag_split = True
         return None
@@ -393,7 +438,6 @@ class DataProcesser:
                     zipMe.write(filename, compress_type=zipfile.ZIP_DEFLATED)
                     remove(file)
         return None
-
 
 # Example
 # myProc = DataProcesser('/home/marc/Dropbox/Work/TSclass/data/paolo/KTR_FOX_DMSO_noEGF_len120_7repl.zip')

@@ -1,6 +1,6 @@
-##################################################################
-# Inspect output of the classifier: confusion table, accuracy... #
-##################################################################
+##################################################################################################
+# Inspect output of the classifier: confusion table, accuracy... Plot tops classification sample #
+##################################################################################################
 
 import torch
 import numpy as np
@@ -170,8 +170,10 @@ def visualize_layer(model, layer_idx=0, linkage='average'):
 
 if __name__ == '__main__':
     data_file = 'data/ErkAkt_6GF_len240.zip'
-    model_file = 'models/2019-04-30-12:14:31_ErkAkt_6GF_len240.pytorch'
+    model_file = 'models/AKT/2019-05-07-10:44:38_ErkAkt_6GF_len240.pytorch'
+    meas_var = 'AKT'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    n_top_worst = 5
 
     model = torch.load(model_file)
     model.eval()
@@ -180,7 +182,7 @@ if __name__ == '__main__':
     model = model.to(device)
 
     data = DataProcesser(data_file)
-    data.subset(sel_groups='ERK', start_time=0, end_time=600)
+    data.subset(sel_groups=meas_var, start_time=0, end_time=600)
     data.get_stats()
     data.process(method='center_train', independent_groups=True)
     data.split_sets()
@@ -203,9 +205,8 @@ if __name__ == '__main__':
     conft['Accuracy'] = pd.Series(accuracy['accuracy'])
     print(conft)
 
-    n = 5
-    tops = top_classification_perclass(model, test_loader, classes, device, n=n)
-    worsts = worst_classification_perclass(model, test_loader, classes, device, n=n)
+    tops = top_classification_perclass(model, test_loader, classes, device, n=n_top_worst)
+    worsts = worst_classification_perclass(model, test_loader, classes, device, n=n_top_worst)
 
     #%%
     # Plot top trajectories in a pdf
@@ -223,7 +224,7 @@ if __name__ == '__main__':
         lplot.append(fig)
         #plt.close()
 
-    pp = PdfPages('output/tops_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
+    pp = PdfPages('output/' + meas_var + '/tops_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
     for plot in lplot:
         pp.savefig(plot)
     pp.close()
@@ -245,7 +246,7 @@ if __name__ == '__main__':
         lplot.append(fig)
         #plt.close()
 
-    pp = PdfPages('output/worsts_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
+    pp = PdfPages('output/' + meas_var + '/worsts_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
     for plot in lplot:
         pp.savefig(plot)
     pp.close()

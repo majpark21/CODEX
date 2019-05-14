@@ -18,7 +18,7 @@ import zipfile
 import time
 
 # %% Hyperparameters
-nepochs = 10
+nepochs = 750
 myseed = 42
 torch.manual_seed(myseed)
 
@@ -30,7 +30,7 @@ lr = 1e-2
 
 # %% Load and process Data
 data_file = 'data/ErkAkt_6GF_len240.zip'
-meas_var = 'ERK'
+meas_var = 'AKT'
 data = DataProcesser(data_file)
 data.subset(sel_groups=meas_var, start_time=0, end_time=600)
 data.get_stats()
@@ -52,7 +52,7 @@ load_model = None
 
 # %% Tensorboard logs and model save
 file_logs = os.path.splitext(os.path.basename(data_file))[0]  # file name without extension
-logs_str = 'logs/' + datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S') + \
+logs_str = 'logs/' + meas_var + '/' + datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S') + \
            '_' + file_logs + '/'
 writer = SummaryWriter(logs_str)
 save_model = 'models/' + logs_str.lstrip('logs/').rstrip('/') + '.pytorch'
