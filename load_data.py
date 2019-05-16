@@ -10,8 +10,7 @@ from copy import copy
 from re import search
 from os import remove, chdir
 from os.path import split, splitext
-
-#Todo: opimize and add independant groups to randomcrop
+from functools import reduce
 
 class DataProcesser:
     """
@@ -341,12 +340,14 @@ class DataProcesser:
         return None
 
 
-#Todo: add groups
-    def crop_random(self, output_length, ignore_na_tails=True, col_id='ID', col_class='class'):
+    def crop_random(self, output_length,  group_crop=None, ignore_na_tails=True, col_id='ID', col_class='class'):
         """
-        Returns a random subset of each row. Useful to get rid of NA tails
+        Returns a random subset of each row. Useful to get rid of NA tails. If "dataset" contains several groups, only one
+        will be used to determine the range of cropping. So caution if NA tails are not strictly aligned across the groups.
         :param output_size: length of each new series
         :param ignore_na_tails: whether to ignore NA tails from subset
+        :param group_crop: name of the measurement used to determine the crop position. If None, use first available
+        group.
         :return: Creates .dataset_cropped
         """
         # Get a random range to crop for each row
@@ -364,26 +365,47 @@ class DataProcesser:
             right = left + output_length
             return left, right
 
-        # Crop the rows to random range, reset_index to do concat without recreating new columns
+        # Use only the provided group to determine range of cropping
         colnames = list(self.dataset.columns.values)
-        colnames.remove(col_id)
+        colnames.remove(self.col_id)
         colnames.remove(col_class)
-        range_subset = self.dataset.apply(get_range_crop, args=(colnames, output_length, ignore_na_tails,), axis=1)
-        sub_dt = self.dataset[colnames]
-        new_rows = [sub_dt.iloc[irow, range_subset[irow][0]: range_subset[irow][1]]
-                    for irow in range(self.dataset.shape[0])]
-        for row in new_rows:
-            row.reset_index(drop=True, inplace=True)
+        groups = set([i.split('_')[0] for i in colnames])
+        groups = list(groups)
+        groups_dict = {}
+        for group in groups:
+            groups_dict[group] = [i for i in colnames if search('^{0}_'.format(group), i)]
 
-        # Concatenate all rows, add ID and class column
-        dataset_cropped = pd.concat(new_rows, axis=1).T
+        if group_crop is None:
+            group_crop = groups[0]
+        sel_col = groups_dict[group_crop]
+        range_subset = self.dataset.apply(get_range_crop, args=(sel_col, output_length, ignore_na_tails,), axis = 1)
+
+        l_group_cropped = []
+        for group in groups:
+            # Crop the rows to random range, reset_index to do concat without recreating new columns
+            group_dt = self.dataset[groups_dict[group]]
+            new_rows = [group_dt.iloc[irow, range_subset[irow][0]: range_subset[irow][1]]
+                        for irow in range(self.dataset.shape[0])]
+            for row in new_rows:
+                row.reset_index(drop=True, inplace=True)
+
+            # Concatenate all rows, add ID and class column
+            group_cropped = pd.concat(new_rows, axis=1).T
+            group_cropped.columns = ['{}_{}'.format(group,i) for i in range(group_cropped.shape[1])]
+            group_cropped[col_id] = self.dataset[col_id]
+            group_cropped[col_class] = self.dataset[col_class]
+
+            l_group_cropped.append(group_cropped)
+
+        # Stitch individual groups back together and reorder columns
+        dataset_cropped = reduce(lambda left, right: pd.merge(left, right, on=[col_id, col_class]), l_group_cropped)
         newcols = list(dataset_cropped.columns.values)
-        dataset_cropped[col_id] = self.dataset[col_id]
-        dataset_cropped[col_class] = self.dataset[col_class]
-
-        # Reorder columns
+        newcols.remove(col_id)
+        newcols.remove(col_class)
         dataset_cropped = dataset_cropped[[col_id, col_class] + newcols]
-        return dataset_cropped
+
+        self.dataset_cropped = dataset_cropped
+        return None
 
 
     def split_sets(self, which='dataset'):
