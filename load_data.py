@@ -342,25 +342,16 @@ class DataProcesser:
 
 
 #Todo: add groups
-    def crop_random(self, output_length, ignore_na_tails=True, independant_groups=True):
+    def crop_random(self, output_length, ignore_na_tails=True, col_id='ID', col_class='class'):
         """
         Returns a random subset of each row. Useful to get rid of NA tails
         :param output_size: length of each new series
         :param ignore_na_tails: whether to ignore NA tails from subset
         :return: Creates .dataset_cropped
         """
-        newcols = ['X_' + str(i) for i in range(output_length)]
-        self.dataset_cropped = pd.DataFrame(index = self.dataset.index,
-                                            columns=[self.col_id, self.col_class]+newcols)
-        self.dataset_cropped[self.col_id] = self.dataset[self.col_id]
-        self.dataset_cropped[self.col_class] = self.dataset[self.col_class]
-        colnames = list(self.dataset.columns.values)
-        colnames.remove(self.col_id)
-        colnames.remove(self.col_class)
-        for irow in range(self.dataset.shape[0]):
-            series = copy(self.dataset.iloc[irow, :])
-            series = np.array(series.loc[colnames]).astype('float')
-            length = len(series)
+        # Get a random range to crop for each row
+        def get_range_crop(series, cols, output_length, ignore_na_tails):
+            series = np.array(series.loc[cols]).astype('float')
             if ignore_na_tails:
                 pos_non_na = np.where(~np.isnan(series))
                 start = pos_non_na[0][0]
@@ -368,10 +359,31 @@ class DataProcesser:
                 left = np.random.randint(start,
                                          end - output_length + 2)  # +1 to include last in randint; +1 for slction span
             else:
+                length = len(series)
                 left = np.random.randint(0, length - output_length)
-            series = series[left: left + output_length]
-            self.dataset_cropped.iloc[irow, 2:] = series
-        return None
+            right = left + output_length
+            return left, right
+
+        # Crop the rows to random range, reset_index to do concat without recreating new columns
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(col_id)
+        colnames.remove(col_class)
+        range_subset = self.dataset.apply(get_range_crop, args=(colnames, output_length, ignore_na_tails,), axis=1)
+        sub_dt = self.dataset[colnames]
+        new_rows = [sub_dt.iloc[irow, range_subset[irow][0]: range_subset[irow][1]]
+                    for irow in range(self.dataset.shape[0])]
+        for row in new_rows:
+            row.reset_index(drop=True, inplace=True)
+
+        # Concatenate all rows, add ID and class column
+        dataset_cropped = pd.concat(new_rows, axis=1).T
+        newcols = list(dataset_cropped.columns.values)
+        dataset_cropped[col_id] = self.dataset[col_id]
+        dataset_cropped[col_class] = self.dataset[col_class]
+
+        # Reorder columns
+        dataset_cropped = dataset_cropped[[col_id, col_class] + newcols]
+        return dataset_cropped
 
 
     def split_sets(self, which='dataset'):
