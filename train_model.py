@@ -2,7 +2,6 @@
 # Train CNN for classification, output logs with tensorboardX #
 ###############################################################
 #TODO: Use FixedCrop for test loader?
-#TODO: Pass view as an argument of train function?
 
 import torch
 import numpy as np
@@ -34,7 +33,7 @@ lr = 1e-2
 
 # %% Load and process Data
 data_file = 'data/ErkAkt_6GF_len240.zip'
-meas_var = ['ERK', 'AKT']
+meas_var = ['ERK']
 data = DataProcesser(data_file)
 data.subset(sel_groups=meas_var, start_time=0, end_time=600)
 data.get_stats()
@@ -67,7 +66,7 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
                save_model=save_model, logs=True, save_pyfiles=True, lr=lr):
     # ------------------------------------------------------------------------------------------------------------------
     # Model, loss, optimizer
-    model = ConvNetCamBi(batch_size=batch_size, nclass=nclass, length=length, nfeatures=nfeatures)
+    model = ConvNetCam(batch_size=batch_size, nclass=nclass, length=length, nfeatures=nfeatures)
     if load_model:
         model.load_state_dict(torch.load(load_model))
     model.double()
@@ -88,6 +87,16 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
                 zipMe.write(file, compress_type=zipfile.ZIP_DEFLATED)
 
     # ------------------------------------------------------------------------------------------------------------------
+    # Get adequate size of sample for nn.Conv layers
+    # Add a dummy channel dimension for conv1D layer (if multivariate, treat as a 2D plane with 1 channel)
+    assert len(train_loader.dataset[0]['series'].shape) == 2
+    nchannel, univar_length = train_loader.dataset[0]['series'].shape
+    if nchannel == 1:
+        view_size = (batch_size, 1, univar_length)
+    elif nchannel >= 2:
+        view_size = (batch_size, 1, nchannel, univar_length)
+
+    # ------------------------------------------------------------------------------------------------------------------
     # Training loop
     for epoch in range(nepochs):
         scheduler.step()
@@ -98,14 +107,9 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
         loss_train = []
         for i_batch, sample_batch in enumerate(train_loader):
             series, label = sample_batch['series'], sample_batch['label']
-            nchannel = series.shape[1]
             if cuda_available:
                 series, label = series.cuda(), label.cuda()
-
-            # Add a dummy channel dimension for conv1D layer
-            #series = series.view(batch_size, nchannel, length)
-            # Add a dummy channel dimension for conv2D layer (treat signal as a 2D plane with 1 channel)
-            series = series.view(batch_size, 1, nchannel, length)
+            series = series.view(view_size)
 
             prediction = model(series)
 
@@ -147,8 +151,7 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
             series, label = sample_batch['series'], sample_batch['label']
             if cuda_available:
                 series, label = series.cuda(), label.cuda()
-            #series = series.view(batch_size, 1, length)
-            series = series.view(batch_size, 1, nchannel, length)
+            series = series.view(view_size)
             label = torch.autograd.Variable(label)
 
             prediction = model(series)
