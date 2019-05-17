@@ -1,14 +1,15 @@
 ###############################################################
 # Train CNN for classification, output logs with tensorboardX #
 ###############################################################
-#TODO: Use FixedCrop for test loader, ignore na_tails
+#TODO: Use FixedCrop for test loader?
+#TODO: Pass view as an argument of train function?
 
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
 from load_data import DataProcesser
 from torchvision import transforms
-from models import ConvNetCam
+from models import ConvNetCam, ConvNetCamBi
 from class_dataset import myDataset, ToTensor, Subtract, RandomShift, RandomNoise, RandomCrop, FixedCrop
 from train_utils import accuracy, AverageMeter
 import datetime
@@ -18,9 +19,11 @@ import zipfile
 import time
 
 # %% Hyperparameters
-nepochs = 750
+nepochs = 3
 myseed = 42
 torch.manual_seed(myseed)
+torch.cuda.manual_seed(myseed)
+np.random.seed(myseed)
 
 batch_size = 128
 length = 200
@@ -28,9 +31,10 @@ nclass = 7
 nfeatures = 20
 lr = 1e-2
 
+
 # %% Load and process Data
 data_file = 'data/ErkAkt_6GF_len240.zip'
-meas_var = 'AKT'
+meas_var = ['ERK', 'AKT']
 data = DataProcesser(data_file)
 data.subset(sel_groups=meas_var, start_time=0, end_time=600)
 data.get_stats()
@@ -39,12 +43,12 @@ data.split_sets()
 data_train = myDataset(dataset=data.train_set, transform=transforms.Compose([
     RandomCrop(output_size=length, ignore_na_tails=True),
     transforms.RandomApply([RandomNoise(mu=0, sigma=0.02)]),
-    Subtract(data.stats['mu'][meas_var]['train']),
+    Subtract([data.stats['mu']['ERK']['train']]),
     ToTensor()
 ]))
 data_test = myDataset(dataset=data.validation_set, transform=transforms.Compose([
     RandomCrop(output_size=length, ignore_na_tails=True),
-    Subtract(data.stats['mu'][meas_var]['train']),
+    Subtract([data.stats['mu']['ERK']['train']]),
     ToTensor()
 ]))
 load_model = None
@@ -52,7 +56,7 @@ load_model = None
 
 # %% Tensorboard logs and model save
 file_logs = os.path.splitext(os.path.basename(data_file))[0]  # file name without extension
-logs_str = 'logs/' + meas_var + '/' + datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S') + \
+logs_str = 'logs/' + '_'.join(meas_var) + '/' + datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S') + \
            '_' + file_logs + '/'
 writer = SummaryWriter(logs_str)
 save_model = 'models/' + logs_str.lstrip('logs/').rstrip('/') + '.pytorch'
@@ -63,11 +67,11 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
                save_model=save_model, logs=True, save_pyfiles=True, lr=lr):
     # ------------------------------------------------------------------------------------------------------------------
     # Model, loss, optimizer
-    cuda_available = torch.cuda.is_available()
-    model = ConvNetCam(batch_size=batch_size, nclass=nclass, length=length, nfeatures=nfeatures)
+    model = ConvNetCamBi(batch_size=batch_size, nclass=nclass, length=length, nfeatures=nfeatures)
     if load_model:
         model.load_state_dict(torch.load(load_model))
     model.double()
+    cuda_available = torch.cuda.is_available()
     if cuda_available:
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-3)
@@ -94,11 +98,15 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
         loss_train = []
         for i_batch, sample_batch in enumerate(train_loader):
             series, label = sample_batch['series'], sample_batch['label']
+            nchannel = series.shape[1]
             if cuda_available:
                 series, label = series.cuda(), label.cuda()
 
             # Add a dummy channel dimension for conv1D layer
-            series = series.view(batch_size, 1, length)
+            #series = series.view(batch_size, nchannel, length)
+            # Add a dummy channel dimension for conv2D layer (treat signal as a 2D plane with 1 channel)
+            series = series.view(batch_size, 1, nchannel, length)
+
             prediction = model(series)
 
             loss = criterion(prediction, label)
@@ -139,7 +147,8 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
             series, label = sample_batch['series'], sample_batch['label']
             if cuda_available:
                 series, label = series.cuda(), label.cuda()
-            series = series.view(batch_size, 1, length)
+            #series = series.view(batch_size, 1, length)
+            series = series.view(batch_size, 1, nchannel, length)
             label = torch.autograd.Variable(label)
 
             prediction = model(series)

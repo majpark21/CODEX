@@ -43,6 +43,8 @@ class myDataset(Dataset):
         self.col_id = col_id
         self.col_class = col_class
         self.check_datasets()
+        self.col_id_idx = self.dataset.columns.get_loc(self.col_id)
+        self.col_class_idx = self.dataset.columns.get_loc(self.col_class)
 
         self.groups = groups
         if self.groups is None:
@@ -55,8 +57,8 @@ class myDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        identifier = self.dataset.at[idx, self.col_id]
-        label = np.array(self.dataset.at[idx, self.col_class])
+        identifier = self.dataset.iloc[idx, self.col_id_idx]
+        label = np.array(self.dataset.iloc[idx, self.col_class_idx])
         label = label.astype('int')
         sequence_arrays = [self.dataset.iloc[idx, self.groups_indices[group][0] : self.groups_indices[group][1]].values
                            for group in self.groups]  # .values turns into numpy
