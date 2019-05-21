@@ -60,6 +60,10 @@ logs_str = 'logs/' + '_'.join(meas_var) + '/' + datetime.datetime.now().strftime
 writer = SummaryWriter(logs_str)
 save_model = 'models/' + logs_str.lstrip('logs/').rstrip('/') + '.pytorch'
 
+if not os.path.exists(file_logs):
+    os.makedirs(file_logs)
+if not os.path.exists('models/' + '_'.join(meas_var)):
+    os.makedirs('models/' + '_'.join(meas_var))
 
 #%%
 def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=load_model,

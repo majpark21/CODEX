@@ -9,12 +9,11 @@ from load_data import DataProcesser
 from torchvision import transforms
 from models import ConvNetCam, ConvNetCamBi
 from class_dataset import myDataset, ToTensor, Subtract, RandomShift, RandomNoise, RandomCrop, FixedCrop
-from train_utils import accuracy, AverageMeter
-import datetime
 import time
+import matplotlib.pyplot as plt
 
 # %% Hyperparameters
-lr = [1e-5 * (10**i) for i in np.arange(0,100,0.1)]
+lr = [1e-5 * (10**i) for i in np.arange(0,5,0.1)]
 myseed = 42
 torch.manual_seed(myseed)
 torch.cuda.manual_seed(myseed)
@@ -40,16 +39,12 @@ data_train = myDataset(dataset=data.train_set, transform=transforms.Compose([
     ToTensor()
 ]))
 
-
-#%%
+# %%
 def EstimateLR(data_loader, lr_array, nclass=nclass):
     # Number of epochs necessary to cover all learning rates to test
     nbatch_per_epoch = len(train_loader)
-    nepochs = len(lr_array) // nbatch_per_epoch
-    # If batches are bigger than the number of values to test
-    if nepochs == 0:
-        nepochs = 1
-    print('nepochs: {}'.format(nepochs))
+    nepochs = (len(lr_array) // nbatch_per_epoch) + 1
+    print('Number of epochs to cover all LR: {}'.format(nepochs))
 
     # ------------------------------------------------------------------------------------------------------------------
     # Model, loss, optimizer
@@ -76,10 +71,12 @@ def EstimateLR(data_loader, lr_array, nclass=nclass):
     offset_idx = 0
     loss_out = []
     for epoch in range(nepochs):
-        for i_batch, sample_batch in enumerate(train_loader):
-            if i_batch > len(lr_array)-1:
+        for i_batch, sample_batch in enumerate(data_loader):
+            if i_batch + offset_idx > len(lr_array)-1:
                 break
-            print('Batch number: {}/{}; LR: {}'.format(i_batch + offset_idx, len(lr_array), lr_array[i_batch + offset_idx]))
+            print('Batch number: {}/{}; LR: {}'.format(i_batch + offset_idx + 1,
+                                                       len(lr_array),
+                                                       lr_array[i_batch + offset_idx]))
 
             optimizer = torch.optim.Adam(model.parameters(), lr=lr_array[i_batch + offset_idx], betas=(0.9, 0.999))
             series, label = sample_batch['series'], sample_batch['label']
@@ -112,6 +109,12 @@ train_loader = DataLoader(dataset=data_train,
 t0 = time.time()
 losses = EstimateLR(data_loader=train_loader, lr_array=lr, nclass=nclass)
 t1 = time.time()
-
 print('Elapsed time: {}'.format(t1 - t0))
-print(losses)
+
+# %%
+fig, ax = plt.subplots()
+ax.semilogx(lr , losses)
+ax.grid()
+plt.xlabel('Learning Rate (log scale)')
+plt.ylabel('Loss')
+plt.show()

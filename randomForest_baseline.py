@@ -19,12 +19,12 @@ import zipfile
 #%%
 # Read from zip archive and format data into long
 data_file = 'data/ErkAkt_6GF_len240.zip'
-meas_var = 'ERK'
+meas_var = 'AKT'
 data = DataProcesser(data_file)
 data.subset(sel_groups=meas_var, start_time=0, end_time=600)
 data = data.dataset
 data = pd.melt(data, id_vars=['ID', 'class'], var_name='Time', value_name='Ratio_' + meas_var)
-data['Time'] = data['Time'].str.replace('^ERK_', '').astype('int')
+data['Time'] = data['Time'].str.replace('^{}_'.format(meas_var), '').astype('int')
 data = data.sort_values(['ID', 'Time'])
 
 #%%
@@ -45,13 +45,13 @@ dt_timeseries = dt_timeseries.dropna()
 extracted_features = extract_features(dt_timeseries, column_id='ID', column_sort='Time',
                                       column_value='Ratio_' + meas_var, n_jobs=4)
 impute(extracted_features)
-features_filtered = select_features(extracted_features, dt_class)
+features_filtered = select_features(extracted_features, dt_class['class'])
 # extracted_features.to_csv('data/randForest_rawFeatures.csv')
 # features_filtered.to_csv('data/randForest_fltrFeatures.csv')
 
 #%%
 # Read saved features
-features_archive = zipfile.ZipFile('data/randForest_Features.zip', 'r')
+features_archive = zipfile.ZipFile('data/randForest_Features/randForest_Features_{}.zip'.format(meas_var), 'r')
 features_filtered = pd.read_csv(features_archive.open('randForest_fltrFeatures.csv'),
                                 index_col='id')
 X_train, X_test, y_train, y_test = train_test_split(features_filtered, y_target, test_size=0.3, random_state=42)
