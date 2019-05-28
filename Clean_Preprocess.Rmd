@@ -171,7 +171,7 @@ ggplot(dt_plot, aes(x=Time, y=Ratio_AKT)) +
 
 ## Trim out early response
 
-Get rid of the first 100 frames to ignore early acute response to GF. This might bias the network to only look for it. Don't do it here, but while loading data for CNN training.
+Get rid of the first 100 frames to ignore early acute response to GF. This might bias the network to only look for it. Don't do it here, but while loading data for CNN training. Export only cells with IDS which would still be longer than thresholf after trimming 100 frames.
 
 ```{r}
 dt_clipped <- dt[Time >= 100]
@@ -190,6 +190,42 @@ Export with suitable format for CNN training. Comports 3 files: dataset (wide fo
 ```{r eval=FALSE}
 # Cast to wide with proper column names
 dt_export <- dt[Uniq %in% dt_len[len >= len_threshold, Uniq], .(Uniq, Stimulation, Time, Ratio_ERK, Ratio_AKT)]
+dt_export <- dt_export[!Stimulation %in% c("ARG", "TGF")]
+dt_export <- dcast(dt_export, Uniq + Stimulation ~ Time, value.var = c("Ratio_ERK", "Ratio_AKT"))
+colnames(dt_export) <- str_replace(colnames(dt_export), "Ratio_", "")
+setnames(dt_export, c("Uniq", "Stimulation"), c("ID", "class"))
+
+# Dummy code the classes with integer (required by Pytorch), store code in a DT
+dt_classes <- data.table(class_ID = 0:(length(unique(dt_export$class)) - 1),
+                         class = unique(dt_export$class))
+dt_export <- merge(dt_export, dt_classes, by="class")
+dt_export[, c("class", "class_ID") := .(class_ID, NULL)]
+setcolorder(dt_export, c("ID", "class"))
+
+# Split in train/validation/test sets
+train_ids <- sample(dt_export$ID, round(0.7*nrow(dt_export)), replace = F)
+valid_ids <- sample(setdiff(dt_export$ID, train_ids), round(0.2*nrow(dt_export)), replace = F)
+tests_ids <- sample(dt_export[!ID %in% c(train_ids, valid_ids), ID])
+# Checks
+paste("There is", sum(duplicated(c(train_ids, valid_ids, tests_ids))), "overlap between the sets")
+paste("The number of unique IDs in the three sets is equal to the total number of IDs:",
+      length(unique(c(train_ids, valid_ids, tests_ids))) == nrow(dt_export))
+dt_sets <- data.table(ID = c(train_ids, valid_ids, tests_ids),
+                      set = rep(c("train", "validation", "test"),
+                                times = unlist(lapply(list(train_ids, valid_ids, tests_ids), length))))
+
+# Export
+fwrite(dt_export, "data/toZip/dataset.csv", na = "NA")
+fwrite(dt_classes, "data/toZip/classes.csv", na = "NA")
+fwrite(dt_sets, "data/toZip/id_set.csv", na = "NA")
+```
+
+## Export cells with trimmed IDs
+
+Make a second dataset with only cell IDs from which could trim 100 frames and still have length above threhsold.
+```{r eval=FALSE}
+# Cast to wide with proper column names
+dt_export <- dt[Uniq %in% dt_len_clipped[len >= len_threshold, Uniq], .(Uniq, Stimulation, Time, Ratio_ERK, Ratio_AKT)]
 dt_export <- dt_export[!Stimulation %in% c("ARG", "TGF")]
 dt_export <- dcast(dt_export, Uniq + Stimulation ~ Time, value.var = c("Ratio_ERK", "Ratio_AKT"))
 colnames(dt_export) <- str_replace(colnames(dt_export), "Ratio_", "")
