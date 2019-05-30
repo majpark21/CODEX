@@ -6,18 +6,17 @@
 # - D: Equal mix of Gaussian and truncated Gaussian; channel 2 has a peak AFTER each event in channel 1
 #######################################
 
-#TODO: check probability for peak proportions
-
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
 
-def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline = 0, sigma_noise = 0, seed = 7,
+def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline = 0, sigma_noise = 0, seed = None,
                   trunc = 'left', scale_peak = 1, noise_height = (1, 1), noise_width = (0.2, 0.2)):
     """
     Create a series with a mixture of Gaussians and truncated Gaussians.
     :param nseries: int, number of series.
-    :param trunc: side of the Gaussians that must be truncated, one of ['left', 'right'].
+    :param trunc: side of the Gaussians that must be truncated, one of ['left', 'right', 'both']. 'Both' means that
+    for each peak, the direction of the truncation is chosen at random.
     :param scale_peak: float, adjust height of peak (default peak height is 1).
     :param noise_height: float 2-tuple, range from which to sample individual peak height.
     :param noise_width: float 2-tuple, range from which to sample individual peak width.
@@ -26,16 +25,16 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
     :param prop_gaussian: float 2-tuple, range for the proportion of Gaussians. Must either start at 0 or end at 1.
     :param baseline: float, baseline level for the series
     :param sigma_noise: float, standard deviation of additive Gaussian noise.
-    :param seed: int, seed for pseudo-random generators.
+    :param seed: int or None, seed for pseudo-random generators.
     :return: A numpy array.
     """
     assert prop_gaussian[0] <= prop_gaussian[1]
-    assert prop_gaussian[0] == 0 or prop_gaussian[1] == 1
+    assert prop_gaussian[0] == 0 or prop_gaussian[1] == 1  # not necessary
     assert noise_height[0] <= noise_height[1]
     assert noise_width[0] <= noise_width[1]
-    assert trunc in ['left', 'right'] or trunc is None
+    assert trunc in ['left', 'right', 'both'] or trunc is None
     if sigma_noise is None:
-        sigma_noise = np.mean(noise_width) / 10
+        sigma_noise = np.mean(noise_height) / 20
     np.random.seed(seed)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -54,9 +53,13 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
                 sigma_peak = np.random.uniform(noise_width[0], noise_width[1])
                 y = noise_height_peak * np.exp(-((x-pos)**2)/(2*(sigma_peak**2)))
                 # Use peak position to find position of maxima
-                if trunc == 'left':
+                if trunc == 'both':
+                    trunc_direction = np.random.choice(['left', 'right'])
+                else:
+                    trunc_direction = trunc
+                if trunc_direction == 'left':
                     y[:pos] = 0
-                elif trunc == 'right':
+                elif trunc_direction == 'right':
                     y[pos:] = 0
                 trajGauss.append(y)
             trajGauss = np.array(trajGauss)
@@ -71,14 +74,21 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
     # Peak part of the signal
     # Random proportions of Gaussian from provided range
     range_nGauss = np.ceil(npeak * np.array(prop_gaussian)).astype('int')
-    nGauss = np.random.choice(np.arange(range_nGauss[0], range_nGauss[1] + 1))
-    nTrGauss = npeak - nGauss
-
-    trajGauss = create_peak_traj(length=length, npeak=nGauss, nseries=nseries, trunc=None,
-                     noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
-    trajTrGauss = create_peak_traj(length=length, npeak=nTrGauss, nseries=nseries, trunc=trunc,
-                     noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
-    peak_data = trajGauss + trajTrGauss
+    ltraj = []
+    lgauss =[]
+    ltr = []
+    for i in range(nseries):
+        nGauss = np.random.choice(np.arange(range_nGauss[0], range_nGauss[1] + 1))
+        nTrGauss = npeak - nGauss
+        trajGauss = create_peak_traj(length=length, npeak=nGauss, nseries=1, trunc=None,
+                         noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
+        trajTrGauss = create_peak_traj(length=length, npeak=nTrGauss, nseries=1, trunc=trunc,
+                         noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
+        ltraj.append(trajGauss + trajTrGauss)
+        lgauss.append(nGauss)
+        ltr.append(nTrGauss)
+    # One trajectory per row
+    peak_data = np.vstack(ltraj)
 
     # ------------------------------------------------------------------------------------------------------------------
     # Noise part of the signal
@@ -89,17 +99,27 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
     out = np.round(peak_data + noise_data, 4)
     return out
 
+
+def add_channel2():
+    """
+    Take positions of events of channel 1 and add own signal
+    :return:
+    """
+    return None
+
 length = 750
 nseries = 6
 npeak = 4
-propGauss = (0.5, 1)
+propGauss = (0, 0.5)
 noise_width=(20, 20)
 noise_height=(1, 1)
-baseline = 5
-seed = int(datetime.datetime.now().timestamp())
-
-temp = create_series(nseries=nseries, length=length, npeak=npeak, prop_gaussian=propGauss, seed=seed, trunc="right",
-                     noise_width=noise_width, noise_height=noise_height, baseline=baseline)
+baseline = 0
+sd_noise = None
+trunc = 'both'
+#seed = int(datetime.datetime.now().timestamp())
+temp = create_series(nseries=nseries, length=length, npeak=npeak, prop_gaussian=propGauss, seed=None,
+                                     trunc=trunc,
+                                     noise_width=noise_width, noise_height=noise_height, baseline=baseline, sigma_noise=sd_noise)
 
 ncol = 3
 nrow = 2
