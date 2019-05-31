@@ -7,6 +7,7 @@
 #######################################
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
 
@@ -22,14 +23,13 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
     :param noise_width: float 2-tuple, range from which to sample individual peak width.
     :param length: int, length of the series.
     :param npeak: int, total number of peaks (Gaussians AND truncated Gaussians) in the series
-    :param prop_gaussian: float 2-tuple, range for the proportion of Gaussians. Must either start at 0 or end at 1.
+    :param prop_gaussian: float 2-tuple, range for the proportion of Gaussians.
     :param baseline: float, baseline level for the series
     :param sigma_noise: float, standard deviation of additive Gaussian noise.
     :param seed: int or None, seed for pseudo-random generators.
     :return: A numpy array.
     """
     assert prop_gaussian[0] <= prop_gaussian[1]
-    assert prop_gaussian[0] == 0 or prop_gaussian[1] == 1  # not necessary
     assert noise_height[0] <= noise_height[1]
     assert noise_width[0] <= noise_width[1]
     assert trunc in ['left', 'right', 'both'] or trunc is None
@@ -103,7 +103,7 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
     return out, peak_pos
 
 
-def create_channel2(chan1_mat, pos_mat, shift, height = -1, baseline = 0):
+def create_channel2(chan1_mat, pos_mat, shift, height = -1, baseline = 0.0):
     """
     Take positions of events of channel 1 and make a triangular signal before or after each position.
     :return:
@@ -119,27 +119,75 @@ def create_channel2(chan1_mat, pos_mat, shift, height = -1, baseline = 0):
     chan2_mat += baseline
     return chan2_mat
 
-length = 750
-nseries = 6
-npeak = 4
-propGauss = (0.5, 1)
-noise_width=(10, 40)
-noise_height=(1, 2)
-baseline = 0
-sd_noise = 0
-trunc = 'both'
-#seed = int(datetime.datetime.now().timestamp())
-temp, temp_pos = create_channel1(nseries=nseries, length=length, npeak=npeak, prop_gaussian=propGauss, seed=None,
-                                     trunc=trunc,
-                                     noise_width=noise_width, noise_height=noise_height, baseline=baseline, sigma_noise=sd_noise)
+# ----------------------------------------------------------------------------------------------------------------------
+# Create synthetic dataset with the 4 classes
+# Common parameters
+chan1_params = {'nseries': 10000,
+                'length': 750,
+                'npeak': 4,
+                'noise_width': (15, 25),
+                'noise_height': (1, 1.5),
+                'scale_peak' :1,
+                'baseline': 0,
+                'sigma_noise': 0,
+                'trunc': 'both',
+                'seed': None}
 
-temp2 = create_channel2(chan1_mat=temp, pos_mat=temp_pos, shift=-30, baseline= -0.5, height=-.75)
+# class A: More Gaussians, flat second channel
+chan1_A, pos_A = create_channel1(prop_gaussian=(0.5, 1), **chan1_params)
+chan2_A = np.zeros_like(chan1_A) - 0.5
 
-ncol = 3
-nrow = 2
-for i in range(nseries):
-    plt.subplot(nrow, ncol, i+1)
-    plt.plot(np.arange(length), temp[i,:].squeeze())
-    plt.plot(np.arange(length), temp2[i, :].squeeze())
-plt.show()
+# class B: More Truncated Gaussians, flat second channel
+chan1_B, pos_B = create_channel1(prop_gaussian=(0, 0.5), **chan1_params)
+chan2_B = np.zeros_like(chan1_A) - 0.5
 
+# class C: Equal mix of Gaussians and Truncated Gaussians, peak in second channel BEFORE peak in first channel
+chan1_C, pos_C = create_channel1(prop_gaussian=(0.5, 0.5), **chan1_params)
+chan2_C = create_channel2(chan1_mat=chan1_C, pos_mat=pos_C, shift=-30, baseline= -0.5, height=-1)
+
+# class D: Equal mix of Gaussians and Truncated Gaussians, peak in second channel AFTER peak in first channel
+chan1_D, pos_D = create_channel1(prop_gaussian=(0.5, 0.5), **chan1_params)
+chan2_D = create_channel2(chan1_mat=chan1_D, pos_mat=pos_D, shift=30, baseline= -0.5, height=-1)
+
+# Make dataframe formatted for CNN
+chans1 = [chan1_A, chan1_B, chan1_C, chan1_D]
+chans2 = [chan2_A, chan2_B, chan2_C, chan2_D]
+df = np.hstack([np.vstack(chans1), np.vstack(chans2)])
+df = pd.DataFrame(df)
+df.columns = ['FRST_'+str(i) for i in range(chan1_params['length'])] + ['SCND_'+str(i) for i in range(chan1_params['length'])]
+num_cols = list(df.columns)
+df['class'] = np.repeat([0,1,2,3], chan1_params['nseries'])
+df['ID'] = ['A_'+ str(i) for i in range(chan1_params['nseries'])] + ['B_'+ str(i) for i in range(chan1_params['nseries'])] + ['C_'+ str(i) for i in range(chan1_params['nseries'])] + ['D_'+ str(i) for i in range(chan1_params['nseries'])]
+df = df[['ID', 'class'] + num_cols]
+df.to_csv('data/synthetic_dataset.csv', index=False)
+
+#-----------------------------------------------------------------------------------------------------------------------
+# Split ids
+ntraj = df.shape[0]
+train_ids = np.random.choice(df['ID'], size = round(0.7 * ntraj), replace=False)
+validation_ids = np.random.choice(np.setdiff1d(df['ID'], train_ids), size = round(0.25 * ntraj), replace=False)
+test_ids = np.setdiff1d(df['ID'], train_ids)
+test_ids = np.setdiff1d(test_ids, validation_ids)
+vec_set = np.repeat(['train', 'validation', 'test'], [len(train_ids), len(validation_ids), len(test_ids)])
+
+df_set = pd.DataFrame({'ID': np.concatenate([train_ids, validation_ids, test_ids]), 'set': vec_set})
+df_set.to_csv('data/synthetic_id_set.csv', index=False)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# DF with class IDs
+df_class = pd.DataFrame({'class_ID': [0,1,2,3], 'class':['A', 'B', 'C', 'D']})
+df_class.to_csv('data/synthetic_classes.csv', index=False)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Plot a sample
+
+# ncol = 3
+# nrow = 3
+# for chan1, chan2, classe in zip(chans1, chans2, ['class_' + classe for classe in ['A', 'B', 'C', 'D']]):
+#     for i in range(ncol*nrow):
+#         plt.subplot(nrow, ncol, i+1)
+#         plt.plot(np.arange(chan1_params['length']), chan1[i,:].squeeze())
+#         plt.plot(np.arange(chan1_params['length']), chan2[i, :].squeeze())
+#         plt.title(classe)
+#     plt.show()
