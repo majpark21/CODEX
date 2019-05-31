@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime
 
-def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline = 0, sigma_noise = 0, seed = None,
+def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline = 0, sigma_noise = 0, seed = None,
                   trunc = 'left', scale_peak = 1, noise_height = (1, 1), noise_width = (0.2, 0.2)):
     """
     Create a series with a mixture of Gaussians and truncated Gaussians.
@@ -49,17 +49,15 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
         for pos_vec in posPeak:
             trajGauss = []
             for pos in pos_vec:
-                noise_height_peak = np.random.uniform(noise_height[0], noise_height[1])
+                height_peak = np.random.uniform(noise_height[0], noise_height[1])
                 sigma_peak = np.random.uniform(noise_width[0], noise_width[1])
-                y = noise_height_peak * np.exp(-((x-pos)**2)/(2*(sigma_peak**2)))
+                y = height_peak * np.exp(-((x-pos)**2)/(2*(sigma_peak**2)))
                 # Use peak position to find position of maxima
                 if trunc == 'both':
-                    trunc_direction = np.random.choice(['left', 'right'])
-                else:
-                    trunc_direction = trunc
-                if trunc_direction == 'left':
+                    trunc = np.random.choice(['left', 'right'])
+                if trunc == 'left':
                     y[:pos] = 0
-                elif trunc_direction == 'right':
+                elif trunc == 'right':
                     y[pos:] = 0
                 trajGauss.append(y)
             trajGauss = np.array(trajGauss)
@@ -68,27 +66,32 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
             i += 1
         #peak_data.clip(0.0001, out=peak_data)
         peak_data *= scale_peak
-        return peak_data
+        return peak_data, posPeak
 
     # ------------------------------------------------------------------------------------------------------------------
     # Peak part of the signal
     # Random proportions of Gaussian from provided range
     range_nGauss = np.ceil(npeak * np.array(prop_gaussian)).astype('int')
     ltraj = []
-    lgauss =[]
-    ltr = []
+    lpos = []
     for i in range(nseries):
         nGauss = np.random.choice(np.arange(range_nGauss[0], range_nGauss[1] + 1))
         nTrGauss = npeak - nGauss
-        trajGauss = create_peak_traj(length=length, npeak=nGauss, nseries=1, trunc=None,
+        trajGauss, posGauss = create_peak_traj(length=length, npeak=nGauss, nseries=1, trunc=None,
                          noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
-        trajTrGauss = create_peak_traj(length=length, npeak=nTrGauss, nseries=1, trunc=trunc,
+        trajTrGauss, posTrGauss = create_peak_traj(length=length, npeak=nTrGauss, nseries=1, trunc=trunc,
                          noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
         ltraj.append(trajGauss + trajTrGauss)
-        lgauss.append(nGauss)
-        ltr.append(nTrGauss)
+        # Numpy cannot concatenate empty arrays
+        if posGauss.size and posTrGauss.size:
+            lpos.append(np.hstack([posGauss, posTrGauss]).squeeze())
+        elif posGauss.size:
+            lpos.append(posGauss.squeeze())
+        elif posTrGauss.size:
+            lpos.append(posTrGauss.squeeze())
     # One trajectory per row
     peak_data = np.vstack(ltraj)
+    peak_pos = np.vstack(lpos)
 
     # ------------------------------------------------------------------------------------------------------------------
     # Noise part of the signal
@@ -97,34 +100,46 @@ def create_series(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline
     noise_data += baseline
 
     out = np.round(peak_data + noise_data, 4)
-    return out
+    return out, peak_pos
 
 
-def add_channel2():
+def create_channel2(chan1_mat, pos_mat, shift, height = -1, baseline = 0):
     """
-    Take positions of events of channel 1 and add own signal
+    Take positions of events of channel 1 and make a triangular signal before or after each position.
     :return:
     """
-    return None
+    chan2_mat = np.zeros_like(chan1_mat)
+    nrow, ncol = chan1_mat.shape
+    for irow in range(nrow):
+        # Exclude positions out of range after shift
+        pos_chan2 = pos_mat[irow, :][np.where(pos_mat[irow, :] + shift < ncol)]
+        pos_chan2 = pos_chan2[np.where(pos_chan2 + shift > 0)]
+        chan2_mat[irow, pos_chan2 + shift] = 1
+    chan2_mat *= height
+    chan2_mat += baseline
+    return chan2_mat
 
 length = 750
 nseries = 6
 npeak = 4
-propGauss = (0, 0.5)
-noise_width=(20, 20)
-noise_height=(1, 1)
+propGauss = (0.5, 1)
+noise_width=(10, 40)
+noise_height=(1, 2)
 baseline = 0
-sd_noise = None
+sd_noise = 0
 trunc = 'both'
 #seed = int(datetime.datetime.now().timestamp())
-temp = create_series(nseries=nseries, length=length, npeak=npeak, prop_gaussian=propGauss, seed=None,
+temp, temp_pos = create_channel1(nseries=nseries, length=length, npeak=npeak, prop_gaussian=propGauss, seed=None,
                                      trunc=trunc,
                                      noise_width=noise_width, noise_height=noise_height, baseline=baseline, sigma_noise=sd_noise)
+
+temp2 = create_channel2(chan1_mat=temp, pos_mat=temp_pos, shift=-30, baseline= -0.5, height=-.75)
 
 ncol = 3
 nrow = 2
 for i in range(nseries):
     plt.subplot(nrow, ncol, i+1)
     plt.plot(np.arange(length), temp[i,:].squeeze())
+    plt.plot(np.arange(length), temp2[i, :].squeeze())
 plt.show()
 
