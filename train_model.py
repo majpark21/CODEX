@@ -19,35 +19,35 @@ import time
 
 # %% Hyperparameters
 nepochs = 3
-myseed = 42
+myseed = 7
 torch.manual_seed(myseed)
 torch.cuda.manual_seed(myseed)
 np.random.seed(myseed)
 
 batch_size = 128
-length = 200
-nclass = 7
-nfeatures = 20
-lr = 1e-2
+length = 750
+nclass = 4
+nfeatures = 10
+lr = 1e-3
 
 
 # %% Load and process Data
-data_file = 'data/ErkAkt_6GF_len240.zip'
-meas_var = ['ERK']
+data_file = 'data/synthetic_len750.zip'
+meas_var = ['SCND']
 data = DataProcesser(data_file)
-data.subset(sel_groups=meas_var, start_time=0, end_time=600)
+data.subset(sel_groups=meas_var, start_time=0, end_time=750)
 data.get_stats()
 # data.process(method='center_train', independent_groups=True)
 data.split_sets()
 data_train = myDataset(dataset=data.train_set, transform=transforms.Compose([
-    RandomCrop(output_size=length, ignore_na_tails=True),
+    #RandomCrop(output_size=length, ignore_na_tails=True),
     transforms.RandomApply([RandomNoise(mu=0, sigma=0.02)]),
-    Subtract([data.stats['mu']['ERK']['train']]),
+    #Subtract([data.stats['mu']['ERK']['train']]),
     ToTensor()
 ]))
 data_test = myDataset(dataset=data.validation_set, transform=transforms.Compose([
-    RandomCrop(output_size=length, ignore_na_tails=True),
-    Subtract([data.stats['mu']['ERK']['train']]),
+    #RandomCrop(output_size=length, ignore_na_tails=True),
+    #Subtract([data.stats['mu']['ERK']['train']]),
     ToTensor()
 ]))
 load_model = None
@@ -79,7 +79,7 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-3)
     criterion = torch.nn.CrossEntropyLoss()
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[400, 600, 800, 1750], gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 400, 600, 800], gamma=0.5)
     top1 = AverageMeter()
     top2 = AverageMeter()
 

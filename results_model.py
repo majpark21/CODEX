@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from torch.utils.data import DataLoader
-from class_dataset import myDataset, myDatasetBi, ToTensor, Subtract, RandomCrop
+from class_dataset import myDataset, ToTensor, Subtract, RandomCrop
 from torch.nn import functional as F
 from itertools import repeat
 import scipy.cluster.hierarchy
@@ -15,7 +15,6 @@ from load_data import DataProcesser
 from torchvision import transforms
 import pandas as pd
 import os
-
 
 # Todo: get rid of for loop for acc_per_class (batch size = size dataset)
 
@@ -29,7 +28,13 @@ def confusion_table(model, dataloader, classes, device):
         image_tensor = image_tensor.to(device)
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        image_tensor = image_tensor.view((1,) + image_tensor.shape)
+        assert len(dataloader.dataset[0]['series'].shape) == 2
+        nchannel, univar_length = dataloader.dataset[0]['series'].shape
+        if nchannel == 1:
+            view_size = (model.batch_size, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (model.batch_size, 1, nchannel, univar_length)
+        image_tensor = image_tensor.view(view_size)
         logit = model(image_tensor)
         h_x = F.softmax(logit, dim=1).data.squeeze()
         probs, idx = h_x.sort(dim=0, descending=True)
@@ -157,21 +162,21 @@ def top_scoring_perclass(model, dataloader, classes, device, n=10):
 
 def visualize_layer(model, layer_idx=0, linkage='average'):
     weights = model.features[layer_idx].cpu().weight.detach().numpy().squeeze()
-    link = scipy.cluster.hierarchy.linkage(weights, method=linkage)
+    nfilt, h ,w = weights.shape
+    link = scipy.cluster.hierarchy.linkage(weights.reshape(nfilt, -1), method=linkage)
     order = scipy.cluster.hierarchy.dendrogram(link)['leaves']
-    plt.figure()
-    plt.imshow(weights[order])
-    plt.colorbar()
-    fig, axes = plt.subplots(nrows=len(order), ncols=1)
-    for ax, row in zip(axes.flatten(), weights[order]):
-        ax.plot(np.arange(15), row, 'r-')
+    for i in range(nfilt):
+        plt.subplot(nfilt, 1, i+1)
+        plt.imshow(weights[order[i]])
+    plt.tight_layout()
+    plt.show()
     return None
 
 
 if __name__ == '__main__':
-    data_file = 'data/ErkAkt_6GF_len240.zip'
-    model_file = 'models/AKT/2019-05-07-10:44:38_ErkAkt_6GF_len240.pytorch'
-    meas_var = 'AKT'
+    data_file = 'data/synthetic_len750.zip'
+    model_file = 'models/FRST_SCND/2019-05-31-19:30:05_synthetic_len750.pytorch'
+    meas_var = ['FRST', 'SCND']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     n_top_worst = 5
 
@@ -182,14 +187,14 @@ if __name__ == '__main__':
     model = model.to(device)
 
     data = DataProcesser(data_file)
-    data.subset(sel_groups=meas_var, start_time=0, end_time=600)
+    data.subset(sel_groups=meas_var, start_time=0, end_time=750)
     data.get_stats()
-    data.process(method='center_train', independent_groups=True)
+    #data.process(method='center_train', independent_groups=True)
     data.split_sets()
     classes = tuple(data.classes.iloc[:,1])
 
     data_test = myDataset(dataset=data.validation_set, transform=transforms.Compose([
-        RandomCrop(output_size=model.length, ignore_na_tails=True),
+        #RandomCrop(output_size=model.length, ignore_na_tails=True),
         #Subtract(data.stats['mu']['KTR']['train']),
         ToTensor()]))
     test_loader = DataLoader(dataset=data_test,
@@ -217,14 +222,14 @@ if __name__ == '__main__':
             id = id[1][0]
             subset = data.validation_set.loc[data.validation_set['ID'] == id].iloc[0, 2:]
             subset = np.array(subset).astype('float')
-            plt.plot(np.arange(600), subset, label=id)
+            plt.plot(subset, label=id)
             plt.title(classe)
             plt.legend()
         #plt.show()
         lplot.append(fig)
         #plt.close()
 
-    pp = PdfPages('output/' + meas_var + '/tops_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
+    pp = PdfPages('output/' + '_'.join(meas_var) + '/tops_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
     for plot in lplot:
         pp.savefig(plot)
     pp.close()
@@ -235,18 +240,20 @@ if __name__ == '__main__':
     for classe in classes:
         fig = plt.figure(figsize=(20, 10), dpi=160)
         for item in worsts[classe]:
+            if item[1] == 'init_label':
+                continue
             id = item[1][0]
             mistake = item[2]
             subset = data.validation_set.loc[data.validation_set['ID'] == id].iloc[0, 2:]
             subset = np.array(subset).astype('float')
-            plt.plot(np.arange(600), subset, label=id + ' - ' + mistake)
+            plt.plot(subset, label=id + ' - ' + mistake)
             plt.title(classe)
             plt.legend()
         #plt.show()
         lplot.append(fig)
         #plt.close()
 
-    pp = PdfPages('output/' + meas_var + '/worsts_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
+    pp = PdfPages('output/' + '_'.join(meas_var) + '/worsts_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
     for plot in lplot:
         pp.savefig(plot)
     pp.close()
