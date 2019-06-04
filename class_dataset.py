@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 from copy import deepcopy
 import warnings
 from re import search
+from collections import OrderedDict
 
 
 #TODO: make a single dataset class for both bi and univariate
@@ -75,8 +76,7 @@ class myDataset(Dataset):
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
         colnames.remove(self.col_class)
-        groups = set([i.split('_')[0] for i in colnames])
-        groups = list(groups)
+        groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
         self.groups = groups
 
     def get_groups_indices(self):
