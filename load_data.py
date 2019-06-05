@@ -62,7 +62,7 @@ class DataProcesser:
             self.read_archive()
 
 
-    def read_archive(self):
+    def read_archive(self, datatable=True, **kwargs):
         """
         Read a zip archive, without extraction, than contains:
 
@@ -74,9 +74,15 @@ class DataProcesser:
         * Explicit name of classes as .csv
         :return: 2 pandas, one with raw data, one with IDs
         """
-        self.dataset = pd.read_csv(self.archive.open('dataset.csv'))
-        self.id_set = pd.read_csv(self.archive.open('id_set.csv'))
-        self.classes = pd.read_csv(self.archive.open('classes.csv'))
+        if datatable:
+            from datatable import fread
+            self.dataset = fread(self.archive.open('dataset.csv'), **kwargs).to_pandas()
+            self.id_set = fread(self.archive.open('id_set.csv'), **kwargs).to_pandas()
+            self.classes = fread(self.archive.open('classes.csv'), **kwargs).to_pandas()
+        else:
+            self.dataset = pd.read_csv(self.archive.open('dataset.csv'))
+            self.id_set = pd.read_csv(self.archive.open('id_set.csv'))
+            self.classes = pd.read_csv(self.archive.open('classes.csv'))
         self.check_datasets()
         self.logs.append('Read archive: {0}'.format(self.archive_path))
         return None
