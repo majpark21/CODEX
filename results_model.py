@@ -56,8 +56,13 @@ def acc_per_class(model, dataloader, classes, device):
 
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        image_tensor = image_tensor.view((1,) + image_tensor.shape)
-
+        assert len(dataloader.dataset[0]['series'].shape) == 2
+        nchannel, univar_length = dataloader.dataset[0]['series'].shape
+        if nchannel == 1:
+            view_size = (model.batch_size, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (model.batch_size, 1, nchannel, univar_length)
+        image_tensor = image_tensor.view(view_size)
         logit = model(image_tensor)
         h_x = F.softmax(logit, dim=1).data.squeeze()
         probs, idx = h_x.sort(dim=0, descending=True)
@@ -82,7 +87,13 @@ def top_classification_perclass(model, dataloader, classes, device, n=10):
         image_tensor = image_tensor.to(device)
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        image_tensor = image_tensor.view((1,) + image_tensor.shape)
+        assert len(dataloader.dataset[0]['series'].shape) == 2
+        nchannel, univar_length = dataloader.dataset[0]['series'].shape
+        if nchannel == 1:
+            view_size = (model.batch_size, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (model.batch_size, 1, nchannel, univar_length)
+        image_tensor = image_tensor.view(view_size)
         logit = model(image_tensor)
         h_x = F.softmax(logit, dim=1).data.squeeze()
         probs, idx = h_x.sort(dim=0, descending=True)
@@ -111,7 +122,13 @@ def worst_classification_perclass(model, dataloader, classes, device, n=10):
         image_tensor = image_tensor.to(device)
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        image_tensor = image_tensor.view((1,) + image_tensor.shape)
+        assert len(dataloader.dataset[0]['series'].shape) == 2
+        nchannel, univar_length = dataloader.dataset[0]['series'].shape
+        if nchannel == 1:
+            view_size = (model.batch_size, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (model.batch_size, 1, nchannel, univar_length)
+        image_tensor = image_tensor.view(view_size)
         logit = model(image_tensor)
         h_x = F.softmax(logit, dim=1).data.squeeze()
         probs, idx = h_x.sort(dim=0, descending=True)
@@ -139,7 +156,13 @@ def top_scoring_perclass(model, dataloader, classes, device, n=10):
         image_tensor = image_tensor.to(device)
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        image_tensor = image_tensor.view((1,) + image_tensor.shape)
+        assert len(dataloader.dataset[0]['series'].shape) == 2
+        nchannel, univar_length = dataloader.dataset[0]['series'].shape
+        if nchannel == 1:
+            view_size = (model.batch_size, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (model.batch_size, 1, nchannel, univar_length)
+        image_tensor = image_tensor.view(view_size)
         scores = model(image_tensor)
         h_x = F.softmax(scores, dim=1).data.squeeze()
         probs, idx = h_x.sort(dim=0, descending=True)
