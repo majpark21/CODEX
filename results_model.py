@@ -20,7 +20,7 @@ import os
 
 def confusion_table(model, dataloader, classes, device):
     """
-    Return a confusion table of classificatuin
+    Return a confusion table of classification
     """
     confusion={k:{k:0 for k in classes} for k in classes}
     for sample in iter(dataloader):

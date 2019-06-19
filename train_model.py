@@ -18,7 +18,7 @@ import zipfile
 import time
 
 # %% Hyperparameters
-nepochs = 3
+nepochs = 5
 myseed = 7
 torch.manual_seed(myseed)
 torch.cuda.manual_seed(myseed)
@@ -28,14 +28,17 @@ batch_size = 128
 length = 750
 nclass = 4
 nfeatures = 10
-lr = 1e-3
+lr = 1e-2
+selected_classes = []
 
 
 # %% Load and process Data
 data_file = 'data/synthetic_len750.zip'
-meas_var = ['SCND']
+meas_var = ['FRST', 'SCND']
 data = DataProcesser(data_file)
 data.subset(sel_groups=meas_var, start_time=0, end_time=750)
+if selected_classes:
+    data.dataset = data.dataset[data.dataset[data.col_class].isin(selected_classes)]
 data.get_stats()
 # data.process(method='center_train', independent_groups=True)
 data.split_sets()
@@ -70,7 +73,7 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
                save_model=save_model, logs=True, save_pyfiles=True, lr=lr):
     # ------------------------------------------------------------------------------------------------------------------
     # Model, loss, optimizer
-    model = ConvNetCam(batch_size=batch_size, nclass=nclass, length=length, nfeatures=nfeatures)
+    model = ConvNetCamBi(batch_size=batch_size, nclass=nclass, length=length, nfeatures=nfeatures)
     if load_model:
         model.load_state_dict(torch.load(load_model))
     model.double()
@@ -79,7 +82,7 @@ def TrainModel(train_loader, test_loader, nepochs, nclass=nclass, load_model=loa
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-3)
     criterion = torch.nn.CrossEntropyLoss()
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 400, 600, 800], gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[2, 4, 6, 8], gamma=0.5)
     top1 = AverageMeter()
     top2 = AverageMeter()
 

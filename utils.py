@@ -11,9 +11,23 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
                  feature_layer='pool'):
     """
     Function to get representation and probability of each trajectory in a loader.
-    model: str or nn
-    """
 
+    :param model: str or pytorch model. If str, path to the model file.
+    :param dataloader: pytorch Dataloader, classification output and/or feature representation will be created for each
+    element in the loader. Pay attention to the attribute drop_last, if True last batch would not be processed. If
+    drop_last is false, Dataloader batch_size attribute must be a multiple of the number of elements in the DataLoader.
+    :param export_prob: bool, whether to export classification output.
+    :param export_feat: bool, whether to export latent features. feature_layer defines the layer output to hook.
+    :param softmax: bool, whether to apply softmax to the classification output.
+    :param batch_size: integer, batch size for looping through the loader. Larger batch size will speed up computation
+    but increase memory footprint. The batch_size attribute of the dataloader must be equal to this argument. If None,
+    will use the batch size of the Dataloader.
+    :param device: str, pytorch device. If None will try to use cuda, if not available will use cpu.
+    :param feature_layer: str, name of the model module from which to hook output if export_feat is True.
+    :return: A pandas DataFrame with columns: ID, Class. If export_prob, one column for each class of the output named:
+    'Prob_XXX' where XXX is the class name. If export_feat, one column for each element in the hooked layer output
+    named: 'Feat_I' where I is an increasing integer starting at 0.
+    """
     # Default arguments and checks
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -21,7 +35,7 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
         batch_size = dataloader.batch_size
     if dataloader.batch_size != batch_size:
         raise(ValueError('batch_size must match the one of the DataLoader,'
-                         ' reset DataLoader with batch size: {},'
+                         ' redefine DataLoader with batch size: {},'
                          ' or leave None to use DataLoader batch size.'.format(batch_size)))
 
     if dataloader.drop_last:

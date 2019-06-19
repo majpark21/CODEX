@@ -1,5 +1,6 @@
 from torch.nn import functional as F
 import numpy as np
+from scipy.ndimage import label
 
 # todo: longest strides to largest areas/volumes
 
@@ -85,9 +86,10 @@ def returnCAM(feature_conv, weight_softmax, class_idx):
     return cam
 
 
-def extend_bin(array, max_ext, direction='both'):
+def extend_segments1D(array, max_ext, direction='both'):
     """Extend regions of 1D binarized array."""
     # Spot regions with derivatives and extend n times
+    assert len(array.shape) == 1
     ext_array = np.array(array).copy()
     for i in range(max_ext):
         diff = np.diff(ext_array)
@@ -100,28 +102,37 @@ def extend_bin(array, max_ext, direction='both'):
     return ext_array
 
 
-def longest_strides(array, k=None, value=1):
-    """Return the k longest strides with value in the array."""
-    # Make sure it's a numpy array
-    array = np.array(array).copy()
-    indicator = np.where(array==value, 1, 0)
-    # make sure all runs of ones are well-bounded
-    bounded = np.hstack(([0], indicator, [0]))
-    # get 1 at run starts and -1 at run ends
-    diff = np.diff(bounded)
-    run_starts, = np.where(diff > 0)
-    run_ends, = np.where(diff < 0)
-    lengths = run_ends - run_starts
-    # reorder to have longest strides last
-    order = np.argsort(lengths)
-    lengths = lengths[order]
-    run_starts = run_starts[order]
-    run_ends = run_ends[order]
+def extend_segments(array, max_ext, direction ='both'):
+    """Extend regions of 1 or 2D binarized array. If 2D, each row will be extended independently."""
+    assert len(array.shape) == 1 or len(array.shape) == 2
+    if len(array.shape) == 1:
+        ext_array = extend_segments1D(array, max_ext, direction)
+    elif len(array.shape) == 2:
+        ext_array = np.array(array).copy()
+        for irow in range(array.shape[0]):
+            ext_array[irow, :] = extend_segments1D(array[irow, :], max_ext, direction)
+    return ext_array
+
+
+def longest_segments(array, k=None, structure=None):
+    """Return the k longest segments with 1s in a binary array. Structure must be a valid argument of
+    scipy.ndimage.label. By default, segments can be connected vertically and horizontally, pass appropriate structure
+    for different behaviour. Output is a dictionary where values are the size of the segment and keys are tuples that
+    indicate all the positions of a segment, just like numpy.where(). So can use the keys to directly subset an numpy
+    array at the positions of the segments."""
+    assert np.all(np.unique(array) == np.array([0,1]))
+    # Label each segment with a different integer, 0s are NOT labeled (i.e. remain 0)
+    array_segments, num_segments = label(array, structure=structure)
+    label_segments, size_segments = np.unique(array_segments, return_counts=True)
+    # np.unique returns ordered values, so 0 is always first
+    label_segments = np.delete(label_segments, 0)
+    size_segments = np.delete(size_segments, 0)
+    # Longest segments first, along with label
+    sorted_segments = sorted(zip(size_segments, label_segments), reverse=True)
     if k:
-        lengths = lengths[-k:]
-        run_starts = run_starts[-k:]
-        run_ends = run_ends[-k:]
-    out = {(run_starts[i], run_ends[i]): lengths[i] for i in range(len(lengths))}
+        sorted_segments = sorted_segments[:k]
+    # Need to convert np.where output to tuple for hashable
+    out = {tuple(tuple(i) for i in np.where(array_segments == lab)): size for size, lab in sorted_segments}
     return out
 
 
@@ -146,9 +157,16 @@ def select_series(dataloader=None, id_series=None, array_series=None, device=Non
             if sample['identifier'] == id_series:
                 series = sample['series']
                 series = series.to(device)
+                if len(series.shape) == 1:
+                    series = series.view(1, len(series))
                 # uni: batch, 1 dummy channel, length TS
                 # (1,1,length) for uni; (1,1,2,length) for bi
-                series = series.view((1,) + series.shape)
+                assert len(series.shape) == 2
+                nchannel, univar_length = series.shape
+                if nchannel == 1:
+                    view_size = (1, 1, univar_length)
+                elif nchannel >= 2:
+                    view_size = (1, 1, nchannel, univar_length)
                 flag_series = False
                 break
         # If not found
@@ -160,9 +178,17 @@ def select_series(dataloader=None, id_series=None, array_series=None, device=Non
         series = array_series
         series = series.double()
         series = series.to(device)
+        if len(series.shape) == 1:
+            series = series.view(1, len(series))
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        series = series.view((1,1,) + series.shape)
+        assert len(series.shape) == 2
+        nchannel, univar_length = series.shape
+        if nchannel == 1:
+            view_size = (1, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (1, 1, nchannel, univar_length)
+        series = series.view(view_size)
         id_series = "Series manually provided"
         flag_series = False
 
@@ -173,7 +199,13 @@ def select_series(dataloader=None, id_series=None, array_series=None, device=Non
         series = series.to(device)
         # uni: batch, 1 dummy channel, length TS
         # (1,1,length) for uni; (1,1,2,length) for bi
-        series = series.view((1,) + series.shape)
+        assert len(series.shape) == 2
+        nchannel, univar_length = series.shape
+        if nchannel == 1:
+            view_size = (1, 1, univar_length)
+        elif nchannel >= 2:
+            view_size = (1, 1, nchannel, univar_length)
+        series = series.view(view_size)
 
     if return_id:
         return series, id_series
