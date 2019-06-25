@@ -2,19 +2,21 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import numpy as np
+import pandas as pd
 from load_data import DataProcesser
 from results_model import top_classification_perclass
-from pattern_utils import BinarizedCam, extend_segments, create_cam, longest_segments
+from pattern_utils import extend_segments, create_cam, longest_segments, extract_pattern
 from class_dataset import myDataset, ToTensor, RandomCrop
 from dtaidistance import dtw, clustering
 from models import ConvNetCam
 from skimage.filters import threshold_li, threshold_mean
+import os
 
 #%%
 ############################ Parameters ###################################
 n_series_perclass = 75
 n_pattern_perseries = 3
-patt_percmax_cam = 0.5
+# patt_percmax_cam = 0.5  Replaced by Li threshold
 extend_patt = 2
 min_len_patt = 5
 max_len_patt = 300
@@ -23,9 +25,9 @@ center_patt = True
 #%%
 ############################ Load model and data ##########################
 data_file = 'data/synthetic_len750.zip'
-model_file = 'models/FRST_classAB/2019-06-04-18:06:45_synthetic_len750.pytorch'
+model_file = 'models/FRST_SCND/2019-06-17-15:47:03_synthetic_len750.pytorch'
 selected_set = 'both'
-meas_var = ['FRST']
+meas_var = ['FRST', 'SCND']
 
 is_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if is_cuda else 'cpu')
@@ -72,10 +74,10 @@ data_loader = DataLoader(dataset=selected_data,
                          batch_size=1,
                          shuffle=True,
                          num_workers=4)
-# Dataframe used for retrieving trajectories
-df.columns = ['ID', 'Class'] + [i+1 for i in range(len(df.columns)-2)]
-df = df.melt(['ID', 'Class'])
-df.rename(columns={'variable': 'Time', 'value': 'Value'}, inplace=True)
+# Dataframe used for retrieving trajectories. wide_to_long instead of melt because can melting per group of columns
+df = pd.wide_to_long(df, stubnames=meas_var, i=[data.col_id, data.col_class], j='Time', sep='_', suffix='\d+')
+df = df.reset_index()  # wide_to_long creates a multi-level Index, reset index to retrieve indexes in columns
+df.rename(columns={data.col_id: 'ID', data.col_class: 'Class'}, inplace=True)
 df['ID'] = df['ID'].astype('U32')
 del data  # free memory
 
@@ -95,16 +97,17 @@ print('Selection of trajectories done.')
 store_patts = {i:[] for i in classes}
 i = 1
 for id_trajectory in selected_trajectories:
-    series_numpy = np.array(df.loc[df['ID'] == id_trajectory]['Value']).astype('float')
+    series_numpy = np.array(df.loc[df['ID'] == id_trajectory][meas_var]).astype('float').squeeze()
+    # Row: measurement; Col: time
+    if len(meas_var) >= 2:
+        series_numpy = series_numpy.transpose()
     series_tensor = torch.tensor(series_numpy)
     class_trajectory = df.loc[df['ID']==id_trajectory]['Class'].iloc[0]  # repeated value through all series
     class_label = classes[class_trajectory]
     cam = create_cam(model, array_series=series_tensor, feature_layer='features',
                          device=device, clip=0, target_class=class_trajectory)
-    thresh = threshold_mean(cam)
+    thresh = threshold_li(cam)
     bincam = np.where(cam >= thresh, 1, 0)
-    #bincam = BinarizedCam(model, array_series=series_tensor, percmax=patt_percmax_cam,
-    #                      target_class=class_trajectory, device=device, clip=0)
     bincam_ext = extend_segments(array=bincam, max_ext=extend_patt)
     patterns = longest_segments(array=bincam_ext, k=n_pattern_perseries)
     # Filter short/long patterns
@@ -112,38 +115,84 @@ for id_trajectory in selected_trajectories:
                                                             patterns[k] <= max_len_patt)}
     if len(patterns) > 0:
         for pattern_position in list(patterns.keys()):
-            store_patts[class_label].append(series_numpy[pattern_position])
+            store_patts[class_label].append(extract_pattern(series_numpy, pattern_position, NA_fill=False))
     print('Pattern extraction for trajectory {}/{}'.format(i, len(selected_trajectories)))
     i += 1
 
-# Center patterns beforehand because DTW is sensitive to level
+# Center patterns beforehand because DTW is sensitive to level, center channels independently
 if center_patt:
     for classe in classes:
-        store_patts[classe] = [i - np.mean(i) for i in store_patts[classe]]
+        if len(store_patts[classe][0].shape) == 1:
+            store_patts[classe] = [i - np.nanmean(i) for i in store_patts[classe]]
+        if len(store_patts[classe][0].shape) == 2:
+            store_patts[classe] = [i - np.nanmean(i, axis=1, keepdims=True) for i in store_patts[classe]]
 
 # Dump patterns into csv
 for classe in classes:
-    concat_patts = np.full((len(store_patts[classe]), max_len_patt), np.nan)
+    concat_patts = np.full((len(store_patts[classe]), len(meas_var) * max_len_patt), np.nan)
     for i, patt in enumerate(store_patts[classe]):
-        len_patt = len(patt)
-        concat_patts[i, 0:len_patt] = patt
-    np.savetxt('output/' + meas_var +'/local_patterns/patt_{}.csv'.format(classe), concat_patts, delimiter=',')
+        if len(meas_var) == 1:
+            len_patt = len(patt)
+            concat_patts[i, 0:len_patt] = patt
+        if len(meas_var) >= 2:
+            len_patt = patt.shape[1]
+            for j in range(len(meas_var)):
+                offset = j*max_len_patt
+                concat_patts[i, (0+offset):(len_patt+offset)] = patt[j, :]
+    if len(meas_var) == 1:
+        headers = ','.join([meas_var[0]+'_'+str(k) for k in range(max_len_patt)])
+        fout_patt = 'output/' + meas_var +'/local_patterns/patt_full_{}.csv'.format(classe)
+        np.savetxt(fout_patt, concat_patts,
+                   delimiter=',', header=headers, comments='')
+    elif len(meas_var) >= 2:
+        headers = ','.join([meas + '_' + str(k) for meas in meas_var for k in range(max_len_patt)])
+        fout_patt = 'output/' + '_'.join(meas_var) +'/local_patterns/patt_full_{}.csv'.format(classe)
+        np.savetxt(fout_patt, concat_patts,
+                   delimiter=',', header=headers, comments='')
 
 
 #%%
-#################### Build distance matrix between patterns ###########
-dist_matrix = {i:[] for i in classes}
+################### Build distance matrix between patterns (DTW with multivariate support) #########
 for classe in classes:
-    #dist_matrix[classe] = dtw.distance_matrix_fast(store_patts[classe])
-    dist_matrix[classe] = dtw.distance_matrix(store_patts[classe])
-    np.savetxt('output/' + meas_var + '/local_patterns/dist_{}.csv'.format(classe), dist_matrix[classe], delimiter=',')
+    print('Building distance matrix for class: {} \n'.format(classe))
+    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_full_{}.csv'.format(classe)
+    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/dist_{}.csv'.format(classe)
+    if len(meas_var) == 1:
+        os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {}'.format(fout_patt, fout_dist,
+                                                                                  max_len_patt,
+                                                                                  1))
+    elif len(meas_var) >= 2:
+        os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {}'.format(fout_patt, fout_dist,
+                                                                                  max_len_patt,
+                                                                                  len(meas_var)))
+
+
+# %%
+################################# Cluster patterns and plot results ####################################################
+nclust = 4
+nmedoid = 3
+nseries = 16
+for classe in classes:
+    print('Cluster patterns for class: {} \n'.format(classe))
+    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_full_{}.csv'.format(classe)
+    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/dist_{}.csv'.format(classe)
+    fout_plot = 'output/' + '_'.join(meas_var) + '/local_patterns/pattPlot_{}.pdf'.format(classe)
+    os.system('Rscript pattern_clustering.R -d {} -p {} -o {} -l {} -n {} -c{} -m {} -t {}'.format(fout_dist,
+                                                                                                   fout_patt,
+                                                                                                   fout_plot,
+                                                                                                   max_len_patt,
+                                                                                                   len(meas_var),
+                                                                                                   nclust,
+                                                                                                   nmedoid,
+                                                                                                   nseries))
 
 
 #%%
-# --> Do in R, much more flexible
+####### Alternative: Build distance matrix between patterns (only univariate case, otherwise use R dtw package) ########
+#dist_matrix = {i:[] for i in classes}
+#for classe in classes:
+#    #dist_matrix[classe] = dtw.distance_matrix_fast(store_patts[classe])
+#    dist_matrix[classe] = dtw.distance_matrix(store_patts[classe])
+#    np.savetxt('output/' + meas_var + '/local_patterns/dist_{}.csv'.format(classe), dist_matrix[classe], delimiter=',')
 
-#################### Clustering of patterns based on distance #########
-# model1 = clustering.Hierarchical(dists_fun=dtw.distance_matrix_fast, dists_options={})
-# model2 = clustering.HierarchicalTree(model1)
-# cluster_idx = model2.fit(store_patts['PI3K'])
-# model2.plot("myplot.png")
+

@@ -18,10 +18,11 @@ import zipfile
 
 #%%
 # Read from zip archive and format data into long
-data_file = 'data/ErkAkt_6GF_len240.zip'
-meas_var = 'AKT'
+# Ignore first 100 frames because they contain early response to GF
+data_file = 'data/synthetic_len750.zip'
+meas_var = 'FRST'
 data = DataProcesser(data_file)
-data.subset(sel_groups=meas_var, start_time=0, end_time=600)
+data.subset(sel_groups=meas_var, start_time=0, end_time=750)
 data = data.dataset
 data = pd.melt(data, id_vars=['ID', 'class'], var_name='Time', value_name='Ratio_' + meas_var)
 data['Time'] = data['Time'].str.replace('^{}_'.format(meas_var), '').astype('int')
@@ -67,7 +68,7 @@ metrics.accuracy_score(y_test.values, y_predict)
 
 #%%
 # Fit Random Forest
-model = RandomForestClassifier(n_estimators=10)
+model = RandomForestClassifier(n_estimators=100)
 model.fit(X_train, y_train)
 y_predict = model.predict(X_test)
 # Truth on rows; Predicted on columns

@@ -16,7 +16,7 @@ from torchvision import transforms
 import pandas as pd
 import os
 
-# Todo: get rid of for loop for acc_per_class (batch size = size dataset)
+# Todo: get rid of slow for loop for *_per_class()
 
 def confusion_table(model, dataloader, classes, device):
     """

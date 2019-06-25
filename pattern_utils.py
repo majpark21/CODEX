@@ -205,6 +205,29 @@ def longest_segments(array, k=None, structure=None):
     return out
 
 
+def extract_pattern(origin_array, coord_tuple, NA_fill = True):
+    """
+    Extract a pattern from an array via its list of coordinates stored in a tuple (as returned by np.where() or
+    longest_segments()). The pattern has rectangular shape, with NA padding if NA_fill is True. This is useful to export
+    patterns in 2 or more dimensions and plot them/compute distances between them.
+    :param coord_tuple: a tuple of coordinates as returned by np.where(). For example ((x1,x2,x3), (y1,y2,y3)).
+    :param origin_array: an array from which to extract the pattern.
+    :param NA_fill bool, whether to fill parts of the rectangle not listed in coord_tuple. IF False, will use values
+    from origin_array.
+    :return: a rectangular 2D numpy array with the pattern, padded with NAs. Number of rows from origin_array is
+    maintained.
+    """
+    assert len(origin_array.shape) == 1 or len(origin_array.shape) == 2
+    assert len(coord_tuple) == 2
+    if NA_fill:
+        out = np.full_like(origin_array, np.nan)
+        out[coord_tuple] = origin_array[coord_tuple]
+        out = out[:, np.min(coord_tuple[1]): (np.max(coord_tuple[1]) + 1)]
+    else:
+        out = origin_array[:, np.min(coord_tuple[1]) : (np.max(coord_tuple[1])+1)]
+    return  out
+
+
 def select_series(dataloader=None, id_series=None, array_series=None, device=None, return_id=True):
     """
     Used in create_*_maps to select a series either from a dataloader with ID or directly use provided series. Can also
