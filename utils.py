@@ -41,7 +41,7 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
     if dataloader.drop_last:
         warnings.warn('drop_last==TRUE, in DataLoader, some data might be discarded.')
     else:
-        for i in dataloader:
+        for i in dataloader:  # slow
             size_last_batch = len(i['identifier'])
         if size_last_batch % batch_size != 0:
             raise(ValueError('Batch size: {}, is not a multiple of the number of elements in the DataLoader: {}.'
@@ -89,7 +89,7 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
         if softmax:
             scores = F.softmax(scores, dim=1).data.squeeze()
         # Store batch results
-        llab.append([label.data.squeeze().cpu().numpy()])
+        llab.append(label.data.squeeze().cpu().numpy())
         lidt.append(identifier)
         if export_prob:
             lprob.append(scores.data.squeeze().cpu().numpy())
