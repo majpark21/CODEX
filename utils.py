@@ -5,10 +5,11 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import warnings
+from tqdm import tqdm
 
 
 def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=True, batch_size = None, device=None,
-                 feature_layer='pool'):
+                 feature_layer='pool', progress_bar=True):
     """
     Function to get representation and probability of each trajectory in a loader.
 
@@ -72,6 +73,8 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
             lfeat.append(output.data.squeeze().cpu().numpy())
         model._modules.get(feature_layer).register_forward_hook(hook_feature)
 
+    if progress_bar:
+        pbar = tqdm(total=len(dataloader))
     for sample in iter(dataloader):
         image_tensor, label, identifier = sample['series'], sample['label'], sample['identifier']
         image_tensor = image_tensor.to(device)
@@ -93,6 +96,8 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
         lidt.append(identifier)
         if export_prob:
             lprob.append(scores.data.squeeze().cpu().numpy())
+        if progress_bar:
+            pbar.update(1)
 
     frames = []
     # 1) Frame with ID

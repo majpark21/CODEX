@@ -15,6 +15,7 @@ from load_data import DataProcesser
 from torchvision import transforms
 import pandas as pd
 import os
+from utils import model_output
 
 # Todo: get rid of slow for loop for *_per_class()
 
@@ -194,6 +195,68 @@ def visualize_layer(model, layer_idx=0, linkage='average'):
     plt.tight_layout()
     plt.show()
     return None
+
+# New versions -----------------------------------
+def top_confidence_perclass2(model, dataloader, n=10, mode ='highest', device=None, softmax=True):
+    """
+    Returns the results of classification with highest or lowest confidence per class.
+    :param model: str or pytorch model. If str, path to the model file.
+    :param dataloader: pytorch Dataloader, classification output will be created for each element in the loader. Pay
+    attention to the attribute drop_last, if True last batch would not be processed. If drop_last is False, Dataloader
+    batch_size attribute must be a multiple of the number of elements in the DataLoader.
+    :param n: int, the number of trajectories to return per class.
+    :param device: str, pytorch device. If None will try to use cuda, if not available will use cpu.
+    :param softmax: bool, whether to apply softmax to before selecting th trajectories.
+    :param mode: str, one of ['highest', 'lowest'].
+    :return: A pandas DataFrame with columns: 'ID', 'Class', 'Prob_XXX' where XXX is the class index as returned by
+    the model.
+    """
+    assert mode in ['highest', 'lowest']
+    out = []
+    df_out = model_output(model, dataloader, export_prob=True, export_feat=False, softmax=softmax, device=device)
+    for iclass in range(len((df_out['Class'].unique()))):
+        sort_by = 'Prob_' + str(iclass)
+        if mode == 'highest':
+            out.append(df_out.loc[df_out['Class']==iclass].sort_values(by=sort_by).tail(n))
+        elif mode == 'lowest':
+            out.append(df_out.loc[df_out['Class']==iclass].sort_values(by=sort_by).head(n))
+    return pd.concat(out, axis = 0)
+
+
+def worst_classification_perclass2(model, dataloader, n=10, device=None, softmax=True):
+    """
+    Returns the worst classification per class. Worst classifications are defined as incorrect classification (i.e. the
+    model predicted a class that is not the one of individual) with largest confidence.
+
+    :param model: str or pytorch model. If str, path to the model file.
+    :param dataloader: pytorch Dataloader, classification output will be created for each element in the loader. Pay
+    attention to the attribute drop_last, if True last batch would not be processed. If drop_last is False, Dataloader
+    batch_size attribute must be a multiple of the number of elements in the DataLoader.
+    :param n: int, the number of trajectories to return per class.
+    :param device: str, pytorch device. If None will try to use cuda, if not available will use cpu.
+    :param softmax: bool, whether to apply softmax to before selecting th trajectories.
+    :return: A pandas DataFrame with columns: 'ID', 'Class', 'Prob_XXX' where XXX is the class index as returned by
+    the model.
+    """
+    out = []
+    df_out = model_output(model, dataloader, export_prob=True, export_feat=False, softmax=softmax, device=device)
+    prob_cols = [col for col in df_out.columns if col.startswith('Prob_')]
+    df_out['Prediction_colname'] = df_out[prob_cols].idxmax(axis=1)  # returns name of columns
+    df_out['Prediction'] = df_out['Prediction_colname'].str.replace('^Prob_', '').astype('int')
+    df_out = df_out.reindex(columns=['ID', 'Class', 'Prediction', 'Prediction_colname'] + prob_cols)
+    for classe in df_out['Class'].unique():
+        # Cases where real class is different from the predicted one but where confidence is high for the predicted
+        to_append = df_out.loc[(df_out['Class'] != df_out['Prediction']) &
+                               (df_out['Class'] == classe)].copy()
+        # Skip if no wrong classification for this class
+        if to_append.shape[0] == 0:
+            continue
+        # Report value of predicted class on each row
+        to_append['Prediction_confidence'] = to_append.lookup(to_append.index, to_append.Prediction_colname)
+        to_append.sort_values(by='Prediction_confidence', inplace=True)
+        to_append = to_append.tail(n)
+        out.append(to_append)
+    return pd.concat(out, axis=0).drop(columns=['Prediction_colname', 'Prediction_confidence'])
 
 
 if __name__ == '__main__':
