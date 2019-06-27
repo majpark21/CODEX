@@ -1,28 +1,27 @@
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from functools import reduce
+from tqdm import tqdm
 import pandas as pd
 import torch
 import torch.nn.functional as F
 import numpy as np
+import scipy
 import warnings
-from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
-def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=True, batch_size = None, device=None,
+def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=True, device=None,
                  feature_layer='pool', progress_bar=True):
     """
-    Function to get representation and probability of each trajectory in a loader.
+    Function to get representation and probability of each trajectory in a loader. Increasing the batch_size of
+    dataloader can greatly reduce computation time.
 
     :param model: str or pytorch model. If str, path to the model file.
-    :param dataloader: pytorch Dataloader, classification output and/or feature representation will be created for each
-    element in the loader. Pay attention to the attribute drop_last, if True last batch would not be processed. If
-    drop_last is false, Dataloader batch_size attribute must be a multiple of the number of elements in the DataLoader.
+    :param dataloader: pytorch Dataloader, classification output will be created for each element in the loader. Pay
+    attention to the attribute drop_last, if True last batch would not be processed. Increase to lower computation time.
     :param export_prob: bool, whether to export classification output.
     :param export_feat: bool, whether to export latent features. feature_layer defines the layer output to hook.
     :param softmax: bool, whether to apply softmax to the classification output.
-    :param batch_size: integer, batch size for looping through the loader. Larger batch size will speed up computation
-    but increase memory footprint. The batch_size attribute of the dataloader must be equal to this argument. If None,
-    will use the batch size of the Dataloader.
     :param device: str, pytorch device. If None will try to use cuda, if not available will use cpu.
     :param feature_layer: str, name of the model module from which to hook output if export_feat is True.
     :return: A pandas DataFrame with columns: ID, Class. If export_prob, one column for each class of the output named:
@@ -30,25 +29,12 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
     named: 'Feat_I' where I is an increasing integer starting at 0.
     """
     # Default arguments and checks
+    batch_size = dataloader.batch_size
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    if batch_size is None:
-        batch_size = dataloader.batch_size
-    if dataloader.batch_size != batch_size:
-        raise(ValueError('batch_size must match the one of the DataLoader,'
-                         ' redefine DataLoader with batch size: {},'
-                         ' or leave None to use DataLoader batch size.'.format(batch_size)))
-
     if dataloader.drop_last:
-        warnings.warn('drop_last==TRUE, in DataLoader, some data might be discarded.')
-    else:
-        for i in dataloader:  # slow
-            size_last_batch = len(i['identifier'])
-        if size_last_batch % batch_size != 0:
-            raise(ValueError('Batch size: {}, is not a multiple of the number of elements in the DataLoader: {}.'
-                             ' Make it multiple or set drop_last=True in the DataLoader,'
-                             ' but with the latter last batch will be discarded.'.format(batch_size,
-                                                                    (len(dataloader)-1)*batch_size + size_last_batch)))
+        warnings.warn('dataloader.drop_last is True, some data might be discarded.')
+
     # path to model file
     if isinstance(model, str):
         model = torch.load(model)
@@ -75,7 +61,12 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
 
     if progress_bar:
         pbar = tqdm(total=len(dataloader))
-    for sample in iter(dataloader):
+    nbatch = len(dataloader)
+    for ibatch, sample in enumerate(iter(dataloader)):
+        # Flag last batch, can have different size from the others
+        if ibatch + 1 == nbatch:
+            model.batch_size = len(sample['label'])
+            print('last flag reached of size: {}'.format(model.batch_size))
         image_tensor, label, identifier = sample['series'], sample['label'], sample['identifier']
         image_tensor = image_tensor.to(device)
         # uni: batch, 1 dummy channel, length TS
@@ -143,3 +134,17 @@ def tensorboard_to_df(path_to_logs, tags):
     # Merge all dataframes
     out = reduce(lambda x, y: pd.merge(x, y, on='step'), dfList)
     return out
+
+
+# %%
+def visualize_layer(model, layer_idx=0, linkage='average'):
+    weights = model.features[layer_idx].cpu().weight.detach().numpy().squeeze()
+    nfilt, h ,w = weights.shape
+    link = scipy.cluster.hierarchy.linkage(weights.reshape(nfilt, -1), method=linkage)
+    order = scipy.cluster.hierarchy.dendrogram(link)['leaves']
+    for i in range(nfilt):
+        plt.subplot(nfilt, 1, i+1)
+        plt.imshow(weights[order[i]])
+    plt.tight_layout()
+    plt.show()
+    return None
