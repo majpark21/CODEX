@@ -1,6 +1,7 @@
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from functools import reduce
 from tqdm import tqdm
+from collections import OrderedDict
 import pandas as pd
 import torch
 import torch.nn.functional as F
@@ -66,7 +67,6 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
         # Flag last batch, can have different size from the others
         if ibatch + 1 == nbatch:
             model.batch_size = len(sample['label'])
-            print('last flag reached of size: {}'.format(model.batch_size))
         image_tensor, label, identifier = sample['series'], sample['label'], sample['identifier']
         image_tensor = image_tensor.to(device)
         # uni: batch, 1 dummy channel, length TS
@@ -108,6 +108,8 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
         colnames = ['Feat_' + str(i) for i in range(nfeats)]
         frames.append(pd.DataFrame(lfeat, columns=colnames))
     df_out = pd.concat(frames, axis=1)
+    # Remove hook
+    model._modules[feature_layer]._forward_hooks = OrderedDict()
     return df_out
 
 

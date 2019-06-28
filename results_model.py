@@ -15,7 +15,7 @@ import os
 import re
 from utils import model_output
 
-
+# TODO: sample uncorrelated trajectories
 def confusion_matrix(model, dataloader, device=None, labels_classes=None):
     """
     Return confusion matrix for all element in dataloader.
@@ -54,7 +54,7 @@ def acc_per_class(model, dataloader, device=None, labels_classes=None):
     diag_count = confmat.values[[np.arange(confmat.shape[0])] * 2]
     acc = diag_count / tot_count
     if labels_classes is not None:
-        confmat.rename(labels_classes, axis='index', inplace=True)
+        acc.rename(labels_classes, axis='index', inplace=True)
     return acc
 
 
@@ -119,6 +119,7 @@ def worst_classification_perclass(model, dataloader, n=10, device=None, softmax=
                                (df_out['Class'] == classe)].copy()
         # Skip if no wrong classification for this class
         if to_append.shape[0] == 0:
+            print('No wrong classificattion for class: {}'.format(classe))
             continue
         # Report value of predicted class on each row
         to_append['Prediction_confidence'] = to_append.lookup(to_append.index, to_append.Prediction_colname)
@@ -130,6 +131,51 @@ def worst_classification_perclass(model, dataloader, n=10, device=None, softmax=
         out['Class'].replace(labels_classes, inplace=True)
         out['Prediction'].replace(labels_classes, inplace=True)
         old_labels = {col: re.search('\d+$', col) for col in out.columns.values}
+        new_labels = {col: re.sub('\d+$', labels_classes[int(old_labels[col].group())], col)
+                      for col in old_labels if old_labels[col]}
+        out.rename(new_labels, axis='columns', inplace=True)
+    return out
+
+
+def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, corr='pearson', feature_layer='pool',
+                              device=None, labels_classes=None, start='medoid', seed=7):
+    out = []
+    df_out = model_output(model, dataloader, export_prob=True, export_feat=True, device=device,
+                          feature_layer=feature_layer, softmax=True)
+    prob_cols = [col for col in df_out.columns if col.startswith('Prob_')]
+    feat_cols = [col for col in df_out.columns if col.startswith('Feat_')]
+    for iclass in range(len((df_out['Class'].unique()))):
+        prob_col = 'Prob_' + str(iclass)
+        df_sel = df_out.loc[(df_out['Class'] == iclass) & (df_out[prob_col] >= threshold_confidence)]
+        df_sel = df_sel[['ID'] + feat_cols]
+        if df_sel.shape[0] == 0:
+            print('No individual reaching "threshold_confidence" for class: {}'.format(iclass))
+            continue
+        # --------------------------------------------------------
+        # Greedy set selection of uncorrelated examples
+        set_class = []
+        # 0) Get correlation matrix for this class
+        df_sel.set_index('ID', drop=True, inplace=True)
+        df_sel = df_sel.transpose()
+        df_corr = df_sel.corr(method=corr)
+        # 1) Choose medoid (highest median corr)
+        if start == 'medoid':
+            set_class.append(df_corr.median(axis=0).idxmax())
+        elif start == 'random':
+            set_class.append(df_corr.sample(1, random_state=seed).index[0])
+        # 2) Add least correlated series to the set
+        for k in range(1, n):
+            temp = df_corr.loc[set_class].drop(set_class, axis=1)
+            if temp.shape[1] == 0:
+                print('Exhausted class: {} after {} samples.'.format(iclass, k))
+            set_class.append(temp.median(axis=0).idxmin())
+        # --------------------------------------------------------
+
+        out.append(df_out[df_out['ID'].isin(set_class)])
+    out = pd.concat(out, axis=0)
+    if labels_classes is not None:
+        out['Class'].replace(labels_classes, inplace=True)
+        old_labels = {col: re.search('\d+$', col) for col in prob_cols}
         new_labels = {col: re.sub('\d+$', labels_classes[int(old_labels[col].group())], col)
                       for col in old_labels if old_labels[col]}
         out.rename(new_labels, axis='columns', inplace=True)
