@@ -5,6 +5,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from matplotlib.backends.backend_pdf import PdfPages
 from torch.utils.data import DataLoader
 from class_dataset import myDataset, ToTensor, Subtract, RandomCrop
@@ -15,7 +16,7 @@ import os
 import re
 from utils import model_output
 
-# TODO: sample uncorrelated trajectories
+
 def confusion_matrix(model, dataloader, device=None, labels_classes=None):
     """
     Return confusion matrix for all element in dataloader.
@@ -70,8 +71,7 @@ def top_confidence_perclass(model, dataloader, n=10, mode ='highest', device=Non
     :param softmax: bool, whether to apply softmax to before selecting th trajectories.
     :param mode: str, one of ['highest', 'lowest'].
     :param labels_classes: a dictionary or pandas.Series to rename classes indexes.
-    :return: A pandas DataFrame with columns: 'ID', 'Class', 'Prob_XXX' where XXX is the class index as returned by
-    the model.
+    :return: A pandas DataFrame with columns: 'ID', 'Class', 'Prob_XXX' where XXX is the class index.
     """
     assert mode in ['highest', 'lowest']
     out = []
@@ -104,8 +104,7 @@ def worst_classification_perclass(model, dataloader, n=10, device=None, softmax=
     :param device: str, pytorch device. If None will try to use cuda, if not available will use cpu.
     :param softmax: bool, whether to apply softmax to before selecting th trajectories.
     :param labels_classes: a dictionary or pandas.Series to rename classes indexes.
-    :return: A pandas DataFrame with columns: 'ID', 'Class', 'Prob_XXX' where XXX is the class index as returned by
-    the model.
+    :return: A pandas DataFrame with columns: 'ID', 'Class', 'Prob_XXX' where XXX is the class index.
     """
     out = []
     df_out = model_output(model, dataloader, export_prob=True, export_feat=False, softmax=softmax, device=device)
@@ -137,8 +136,34 @@ def worst_classification_perclass(model, dataloader, n=10, device=None, softmax=
     return out
 
 
-def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, corr='pearson', feature_layer='pool',
-                              device=None, labels_classes=None, start='medoid', seed=7):
+def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, init_set='medoid', corr='pearson',
+                         feature_layer='pool', device=None, labels_classes=None, seed=7):
+    """
+    Return a set of least correlated trajectories for each class in a feature space returnes by CNN.
+    The procedure relies on a greedy algorithm that grows sets by adding least correlated trajectory until required
+    number of trajectories is reached. A first step of trajectories selects trajectories that were correctly classified,
+    optionally with a minimal level of confidence.
+
+    :param model: str or pytorch model. If str, path to the model file.
+    :param dataloader: pytorch Dataloader, classification output will be created for each element in the loader. Pay
+    attention to the attribute drop_last, if True last batch would not be processed. Increase to lower computation time.
+    :param threshold_confidence: float, in pre-selection step, minimal confidence of trajectory classification.
+    Trajectories that don't reach this threshold won't be considered.
+    :param n: int, number of trajectories in least correlated sets.
+    :param init_set: str, one of ['medoid', 'centroid', 'random']. Method to choose the first elements of sets before
+    greedy extension. 'medoid' initializes sets with the trajectory that minimizes the distance to all other
+    trajectories. 'centroid' is the same but uses mean instead of median. 'random' chooses a random start.
+    :param corr: str, correlation method. Must be one of {‘pearson’, ‘kendall’, ‘spearman’}, see
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.corr.html.
+    :param feature_layer: str, name of the model module from which to hook output. See model_output().
+    :param device: str, pytorch device. If None will try to use cuda, if not available will use cpu.
+    :param labels_classes: a dictionary or pandas.Series to rename classes indexes.
+    :param seed: int, seed used to determine random set initialization if init_set is 'random'.
+    :return: a pandas DataFrame with least correlated sets and columns: ID, Class,
+    'Prob_XXX' where XXX is the class name,  'Feat_I' where I is an increasing integer starting at 0 for each element in
+    the hooked layer output.
+    """
+    assert init_set in ['medoid', 'centroid', 'random']
     out = []
     df_out = model_output(model, dataloader, export_prob=True, export_feat=True, device=device,
                           feature_layer=feature_layer, softmax=True)
@@ -159,9 +184,11 @@ def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, corr
         df_sel = df_sel.transpose()
         df_corr = df_sel.corr(method=corr)
         # 1) Choose medoid (highest median corr)
-        if start == 'medoid':
+        if init_set == 'medoid':
             set_class.append(df_corr.median(axis=0).idxmax())
-        elif start == 'random':
+        elif init_set == 'centroid':
+            set_class.append(df_corr.mean(axis=0).idxmax())
+        elif init_set == 'random':
             set_class.append(df_corr.sample(1, random_state=seed).index[0])
         # 2) Add least correlated series to the set
         for k in range(1, n):
@@ -184,10 +211,11 @@ def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, corr
 
 if __name__ == '__main__':
     data_file = 'data/synthetic_len750.zip'
-    model_file = 'models/FRST_SCND/2019-05-31-19:30:05_synthetic_len750.pytorch'
+    model_file = 'forPaper/models/FRST_SCND/2019-06-17-15:47:03_synthetic_len750.pytorch'
     meas_var = ['FRST', 'SCND']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     n_top_worst = 5
+    batch_size = 800
 
     model = torch.load(model_file)
     model.eval()
@@ -201,68 +229,70 @@ if __name__ == '__main__':
     #data.process(method='center_train', independent_groups=True)
     data.split_sets()
     classes = tuple(data.classes.iloc[:,1])
+    dict_classes = data.classes['class']
 
     data_test = myDataset(dataset=data.validation_set, transform=transforms.Compose([
         #RandomCrop(output_size=model.length, ignore_na_tails=True),
         #Subtract(data.stats['mu']['KTR']['train']),
         ToTensor()]))
     test_loader = DataLoader(dataset=data_test,
-                             batch_size=1,
+                             batch_size=batch_size,
                              shuffle=True,
                              num_workers=4)
 
 
-    accuracy = acc_per_class(model, test_loader, classes, device)
-    conft = pd.DataFrame.from_dict(confusion_table(model, test_loader, classes, device))
-    conft = conft.reindex(classes, axis=0)
-    conft = conft.reindex(classes, axis=1)
-    conft['Accuracy'] = pd.Series(accuracy['accuracy'])
+    accuracy = acc_per_class(model, test_loader, device, dict_classes)
+    conft = confusion_matrix(model, test_loader, device, dict_classes)
+    conft['Accuracy'] = accuracy
     print(conft)
 
-    tops = top_classification_perclass(model, test_loader, classes, device, n=n_top_worst)
-    worsts = worst_classification_perclass(model, test_loader, classes, device, n=n_top_worst)
+    tops = top_confidence_perclass(model, test_loader, n=n_top_worst, labels_classes=dict_classes)
+    worsts = worst_classification_perclass(model, test_loader, n=n_top_worst, labels_classes=dict_classes)
+    uncorr = least_correlated_set(model, test_loader, n=n_top_worst, labels_classes=dict_classes)
+
 
     #%%
     # Plot top trajectories in a pdf
-    lplot=[]
-    for classe in classes:
-        fig = plt.figure(figsize=(20, 10), dpi=160)
-        for id in tops[classe]:
-            id = id[1][0]
-            subset = data.validation_set.loc[data.validation_set['ID'] == id].iloc[0, 2:]
-            subset = np.array(subset).astype('float')
-            plt.plot(subset, label=id)
-            plt.title(classe)
-            plt.legend()
-        #plt.show()
-        lplot.append(fig)
-        #plt.close()
+    subset = data.validation_set.loc[data.validation_set['ID'].isin(tops['ID'])]
+    subset = subset.melt(id_vars=['ID', 'class'])
+    subset[['Meas','Time']]=subset['variable'].str.extract(r'^(?P<Meas>[A-Za-z]+)_(?P<Time>\d+)$')
+    subset['Time'] = subset['Time'].astype('int')
+    sns.set_style("white")
+    sns.set_context('notebook', font_scale=1.5)
+    grid = sns.FacetGrid(data=subset, col="class", col_wrap=2, sharex=True, height=6, aspect=2)
+    grid.map_dataframe(sns.lineplot, x="Time", y="value", hue="ID", style='Meas')
+    grid.set(xlabel='Time', ylabel='Measurement Value')
+    grid.add_legend()
+    grid.savefig('output/' + '_'.join(meas_var) + '/tops_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
 
-    pp = PdfPages('output/' + '_'.join(meas_var) + '/tops_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
-    for plot in lplot:
-        pp.savefig(plot)
-    pp.close()
 
     #%%
     # Plot worst trajectories in a pdf file
-    lplot=[]
-    for classe in classes:
-        fig = plt.figure(figsize=(20, 10), dpi=160)
-        for item in worsts[classe]:
-            if item[1] == 'init_label':
-                continue
-            id = item[1][0]
-            mistake = item[2]
-            subset = data.validation_set.loc[data.validation_set['ID'] == id].iloc[0, 2:]
-            subset = np.array(subset).astype('float')
-            plt.plot(subset, label=id + ' - ' + mistake)
-            plt.title(classe)
-            plt.legend()
-        #plt.show()
-        lplot.append(fig)
-        #plt.close()
+    subset = data.validation_set.loc[data.validation_set['ID'].isin(worsts['ID'])]
+    subset = pd.merge(subset, worsts[['ID', 'Prediction']], on='ID')
+    subset = subset.melt(id_vars=['ID', 'class', 'Prediction'])
+    subset[['Meas','Time']]=subset['variable'].str.extract(r'^(?P<Meas>[A-Za-z]+)_(?P<Time>\d+)$')
+    subset['Time'] = subset['Time'].astype('int')
+    subset['ID'] = subset['ID'] + '->' + subset['Prediction']
+    sns.set_style("white")
+    sns.set_context('notebook', font_scale=1.5)
+    grid = sns.FacetGrid(data=subset, col="class", col_wrap=2, sharex=True, height=6, aspect=2)
+    grid.map_dataframe(sns.lineplot, x="Time", y="value", hue="ID", style='Meas')
+    grid.set(xlabel='Time', ylabel='Measurement Value')
+    grid.add_legend()
+    grid.savefig('output/' + '_'.join(meas_var) + '/worsts_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
 
-    pp = PdfPages('output/' + '_'.join(meas_var) + '/worsts_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')
-    for plot in lplot:
-        pp.savefig(plot)
-    pp.close()
+
+    #%%
+    # Plot least correlated trajectories in a pdf
+    subset = data.validation_set.loc[data.validation_set['ID'].isin(uncorr['ID'])]
+    subset = subset.melt(id_vars=['ID', 'class'])
+    subset[['Meas','Time']]=subset['variable'].str.extract(r'^(?P<Meas>[A-Za-z]+)_(?P<Time>\d+)$')
+    subset['Time'] = subset['Time'].astype('int')
+    sns.set_style("white")
+    sns.set_context('notebook', font_scale=1.5)
+    grid = sns.FacetGrid(data=subset, col="class", col_wrap=2, sharex=True, height=6, aspect=2)
+    grid.map_dataframe(sns.lineplot, x="Time", y="value", hue="ID", style='Meas')
+    grid.set(xlabel='Time', ylabel='Measurement Value')
+    grid.add_legend()
+    grid.savefig('output/' + '_'.join(meas_var) + '/uncorr_' + os.path.basename(model_file).rstrip('.pytorch') + '.pdf')

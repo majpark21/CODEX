@@ -4,7 +4,7 @@ from torchvision import transforms
 import numpy as np
 import pandas as pd
 from load_data import DataProcesser
-from results_model import top_classification_perclass
+from results_model import top_confidence_perclass, least_correlated_set
 from pattern_utils import extend_segments, create_cam, longest_segments, extract_pattern
 from class_dataset import myDataset, ToTensor, RandomCrop
 from dtaidistance import dtw, clustering
@@ -16,12 +16,15 @@ import os
 ############################ Parameters ###################################
 n_series_perclass = 75
 n_pattern_perseries = 3
+mode_series_selection = 'least_correlated'
+thresh_confidence = 0.75  # used in least_correlated mode to choose set of series with minimal classification confidence
 # patt_percmax_cam = 0.5  Replaced by Li threshold
 extend_patt = 2
 min_len_patt = 5
 max_len_patt = 300
 center_patt = True
 
+assert mode_series_selection in ['top_confidence', 'least_correlated']
 #%%
 ############################ Load model and data ##########################
 data_file = 'data/synthetic_len750.zip'
@@ -29,12 +32,13 @@ model_file = 'models/FRST_SCND/2019-06-17-15:47:03_synthetic_len750.pytorch'
 selected_set = 'both'
 meas_var = ['FRST', 'SCND']
 
+batch_size = 800
 is_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if is_cuda else 'cpu')
 model = torch.load(model_file)
 model.eval()
 model.double()
-model.batch_size = 1
+model.batch_size = batch_size
 model = model.to(device)
 
 data = DataProcesser(data_file)
@@ -45,6 +49,7 @@ data.get_stats()
 #data.crop_random(model.length, ignore_na_tails=True)
 data.split_sets(which='dataset')
 classes = tuple(data.classes.iloc[:, 1])
+classes_dict = data.classes['class']
 #classes = ('A', 'B')
 
 # Random crop before to keep the same in df as the ones passed in the model
@@ -71,7 +76,7 @@ elif selected_set == 'both':
         df = data.dataset
 
 data_loader = DataLoader(dataset=selected_data,
-                         batch_size=1,
+                         batch_size=batch_size,
                          shuffle=True,
                          num_workers=4)
 # Dataframe used for retrieving trajectories. wide_to_long instead of melt because can melting per group of columns
@@ -84,10 +89,15 @@ del data  # free memory
 print('Model and data loaded.')
 #%%
 #################### Filter trajectories that were classified correctly with high confidence ##########################
-top_class = top_classification_perclass(model, data_loader, classes, device, n=n_series_perclass)
+if mode_series_selection == 'least_correlated':
+    set_trajectories = least_correlated_set(model, data_loader, threshold_confidence=thresh_confidence, device=device,
+                                            n=n_series_perclass, labels_classes=classes_dict)
+elif mode_series_selection == 'top_confidence':
+    set_trajectories = top_confidence_perclass(model, data_loader, device=device, n=n_series_perclass,
+                                               labels_classes=classes_dict)
+
 # free some memory by keeping only relevant series
-selected_trajectories = [i[1] for i in top_class.items()]
-selected_trajectories = [i[j][1][0] for i in selected_trajectories for j in range(len(i))]
+selected_trajectories = set_trajectories['ID']
 df = df[df['ID'].isin(selected_trajectories)]
 
 print('Selection of trajectories done.')
@@ -95,6 +105,7 @@ print('Selection of trajectories done.')
 #################### Extract patterns ##############################
 # Store patterns in a list of np arrays for dtaidistance DTW
 store_patts = {i:[] for i in classes}
+model.batch_size = 1
 i = 1
 for id_trajectory in selected_trajectories:
     series_numpy = np.array(df.loc[df['ID'] == id_trajectory][meas_var]).astype('float').squeeze()
@@ -141,22 +152,22 @@ for classe in classes:
                 concat_patts[i, (0+offset):(len_patt+offset)] = patt[j, :]
     if len(meas_var) == 1:
         headers = ','.join([meas_var[0]+'_'+str(k) for k in range(max_len_patt)])
-        fout_patt = 'output/' + meas_var +'/local_patterns/patt_full_{}.csv'.format(classe)
+        fout_patt = 'output/' + meas_var +'/local_patterns/patt_uncorr{}.csv'.format(classe)
         np.savetxt(fout_patt, concat_patts,
                    delimiter=',', header=headers, comments='')
     elif len(meas_var) >= 2:
         headers = ','.join([meas + '_' + str(k) for meas in meas_var for k in range(max_len_patt)])
-        fout_patt = 'output/' + '_'.join(meas_var) +'/local_patterns/patt_full_{}.csv'.format(classe)
+        fout_patt = 'output/' + '_'.join(meas_var) +'/local_patterns/patt_uncorr{}.csv'.format(classe)
         np.savetxt(fout_patt, concat_patts,
                    delimiter=',', header=headers, comments='')
 
-
+print('Patterns extracted and saved.')
 #%%
-################### Build distance matrix between patterns (DTW with multivariate support) #########
+######### Build distance matrix between patterns (normalized DTW to length of series, with multivariate support) #######
 for classe in classes:
     print('Building distance matrix for class: {} \n'.format(classe))
-    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_full_{}.csv'.format(classe)
-    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/dist_{}.csv'.format(classe)
+    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr{}.csv'.format(classe)
+    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/uncorr_dist_norm_{}.csv'.format(classe)
     if len(meas_var) == 1:
         os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {}'.format(fout_patt, fout_dist,
                                                                                   max_len_patt,
@@ -166,7 +177,7 @@ for classe in classes:
                                                                                   max_len_patt,
                                                                                   len(meas_var)))
 
-
+print('Distance matrices built.')
 # %%
 ################################# Cluster patterns and plot results ####################################################
 nclust = 4
@@ -174,9 +185,9 @@ nmedoid = 3
 nseries = 16
 for classe in classes:
     print('Cluster patterns for class: {} \n'.format(classe))
-    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_full_{}.csv'.format(classe)
-    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/dist_{}.csv'.format(classe)
-    fout_plot = 'output/' + '_'.join(meas_var) + '/local_patterns/pattPlot_{}.pdf'.format(classe)
+    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr{}.csv'.format(classe)
+    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/uncorr_dist_norm_{}.csv'.format(classe)
+    fout_plot = 'output/' + '_'.join(meas_var) + '/local_patterns/uncorr_pattPlot_{}.pdf'.format(classe)
     os.system('Rscript pattern_clustering.R -d {} -p {} -o {} -l {} -n {} -c{} -m {} -t {}'.format(fout_dist,
                                                                                                    fout_patt,
                                                                                                    fout_plot,
@@ -186,7 +197,7 @@ for classe in classes:
                                                                                                    nmedoid,
                                                                                                    nseries))
 
-
+print('Clustering done.')
 #%%
 ####### Alternative: Build distance matrix between patterns (only univariate case, otherwise use R dtw package) ########
 #dist_matrix = {i:[] for i in classes}

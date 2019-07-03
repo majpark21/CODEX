@@ -26,6 +26,7 @@ infile <- args$infile
 outfile <- args$outfile
 len <- args$length
 nchannel <- args$nchannel
+normDist <- TRUE
 
 dt <- fread(infile)
 # Build distance matrix, DTW in multivariate case ----------------
@@ -39,7 +40,11 @@ pb <- txtProgressBar(min=1, max=length(dt_split)-1, initial = 1, style=3 )
 for(i in 1:(length(dt_split)-1)){
   setTxtProgressBar(pb,i)
   for(j in (i+1):length(dt_split)){
-    dist_mat[i,j] <- dtw(x=na.omit(dt_split[[i]]), y=na.omit(dt_split[[j]]), distance.only = TRUE)$distance  # dtw doesn't allow NAs
+    if(normDist){
+      dist_mat[i,j] <- dtw(x=na.omit(dt_split[[i]]), y=na.omit(dt_split[[j]]), distance.only = TRUE)$normalizedDistance	# dtw doesn't allow NAs
+    } else {
+      dist_mat[i,j] <- dtw(x=na.omit(dt_split[[i]]), y=na.omit(dt_split[[j]]), distance.only = TRUE)$distance  # dtw doesn't allow NAs
+    }
   }
 }
 # For consistency with dtaidistance

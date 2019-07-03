@@ -32,16 +32,7 @@ n_clust <- args$ncluster
 n_medoid <- args$nmedoid
 n_patt <- args$npatt
 
-
-# classe <- "B"
-# dist_file <-  paste0("output/FRST_classAB/local_patterns2/dist_", classe, ".csv")
-# patt_file <- paste0("output/FRST_classAB/local_patterns2/patt_", classe, ".csv")
-# out_file <- str_replace(patt_file, "\\.csv", "\\.pdf")
-# n_patt <- 16
-# n_clust <- 4
-# n_medoid <- 3
-
-############## Clustering
+############## Clustering ----
 dist_mat <- fread(dist_file)
 dist_mat <- as.matrix(dist_mat)
 rownames(dist_mat) = colnames(dist_mat)
@@ -62,7 +53,7 @@ cluster_idx <- data.table(ID=names(cluster_idx), cluster_idx)
 cluster_idx[, ID := str_replace(ID, "^V", "ID_")]
 
 
-############## Medoid of clusters
+############## Medoid of clusters ----
 # Get distance matrix in long format
 dist_mat <- fread(dist_file)
 dist_mat <- as.matrix(dist_mat)
@@ -84,7 +75,7 @@ medoid_cluster <- function(dists, clusts, nmed, permut_ids=TRUE){
     if(permut_ids){
       permuted <- copy(clust_dist)
       setnames(permuted, c("ID1", "ID2"), c("ID2", "ID1"))
-      clust_dist <- rbindlist(list(clust_dist, permuted))
+      clust_dist <- rbindlist(list(clust_dist, permuted), use.names = FALSE)
     }
     # Keep ids that have minimal median distance to all others
     med_distance <- clust_dist[, .(med_dist=median(distance)), by=ID1]
@@ -103,7 +94,7 @@ medoids[, rank := 1:nrow(.SD), by=cluster_idx]
 setnames(medoids, "ID1", "ID")
 
 
-############# SOM
+############# SOM ----
 #dt_patt <- fread(patt_file)
 #mat_patt <- as.matrix(dt_patt)
 #mygrid <- somgrid(xdim=5, ydim=3, topo="rectangular")
@@ -116,13 +107,14 @@ setnames(medoids, "ID1", "ID")
  
 
 
-############## Pattern plotting
+############## Pattern plotting ----
 dt_patt <- fread(patt_file)
 dt_patt[, ID := paste0("ID_", 1:nrow(dt_patt))]
 
 # Plot sample from each cluster4x4 on different PDF pages
 dt_plot <- melt(dt_patt, id.vars = "ID")
-dt_plot[, Time := as.numeric(str_extract(variable, "[0-9]+"))]
+dt_plot[, Measure := str_extract(variable, "^[A-Za-z]+")][, Measure := factor(Measure, unique(Measure))]
+dt_plot[, Time := as.numeric(str_extract(variable, "[0-9]+$"))]
 dt_plot <- merge(dt_plot, cluster_idx, by="ID")
 dt_plot[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 
@@ -134,7 +126,7 @@ plot(tree_plot)
 dt_medoid <- dt_plot[ID %in% medoids$ID]
 dt_medoid <- merge(dt_medoid, medoids, by=c("ID", "cluster_idx"))
 p1 <- ggplot(dt_medoid, aes(x=Time, y=value)) +
-  geom_line(aes(group=ID)) +
+  geom_line(aes(color=Measure)) +
   facet_grid(cluster_idx~rank) +
   geom_label(aes(label = round(med_dist, 3)), x=max(dt_medoid$Time)-5, y=min(dt_medoid$value, na.rm=T) + 0.1) +
   theme_bw() +
@@ -149,7 +141,7 @@ for(i in unique(dt_plot[, cluster_idx])){
   # Pattern plot
   traj_to_plot <- sample(unique(dt_plot[cluster_idx == i, ID]), n_patt_plot, replace = F)
   p2 <- ggplot(dt_plot[ID %in% traj_to_plot], aes(x = Time, y=value)) +
-    geom_line(aes(group=ID)) +
+    geom_line(aes(color=Measure)) +
     facet_wrap("ID") +
     theme_bw() +
     ggtitle(paste0("Cluster number: ", i))
