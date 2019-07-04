@@ -195,6 +195,7 @@ def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, init
             temp = df_corr.loc[set_class].drop(set_class, axis=1)
             if temp.shape[1] == 0:
                 print('Exhausted class: {} after {} samples.'.format(iclass, k))
+                break
             set_class.append(temp.median(axis=0).idxmin())
         # --------------------------------------------------------
 
@@ -210,9 +211,9 @@ def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, init
 
 
 if __name__ == '__main__':
-    data_file = 'data/synthetic_len750.zip'
-    model_file = 'forPaper/models/FRST_SCND/2019-06-17-15:47:03_synthetic_len750.pytorch'
-    meas_var = ['FRST', 'SCND']
+    data_file = 'data/ErkAkt_6GF_len240_repl2_trim100.zip'
+    model_file = 'forPaper/models/ERK_AKT/2019-07-04-11:21:58_ErkAkt_6GF_len240_repl2_trim100.pytorch'
+    meas_var = ['ERK', 'AKT']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     n_top_worst = 5
     batch_size = 800
@@ -224,7 +225,7 @@ if __name__ == '__main__':
     model = model.to(device)
 
     data = DataProcesser(data_file)
-    data.subset(sel_groups=meas_var, start_time=0, end_time=750)
+    data.subset(sel_groups=meas_var, start_time=0, end_time=600)
     data.get_stats()
     #data.process(method='center_train', independent_groups=True)
     data.split_sets()
@@ -232,8 +233,8 @@ if __name__ == '__main__':
     dict_classes = data.classes['class']
 
     data_test = myDataset(dataset=data.validation_set, transform=transforms.Compose([
-        #RandomCrop(output_size=model.length, ignore_na_tails=True),
-        #Subtract(data.stats['mu']['KTR']['train']),
+        RandomCrop(output_size=model.length, ignore_na_tails=True),
+        Subtract([data.stats['mu']['ERK']['train'], data.stats['mu']['AKT']['train']]),
         ToTensor()]))
     test_loader = DataLoader(dataset=data_test,
                              batch_size=batch_size,
