@@ -11,6 +11,8 @@ from re import search
 from os import remove, chdir
 from os.path import split, splitext
 from functools import reduce
+from collections import OrderedDict
+
 
 class DataProcesser:
     """
@@ -160,8 +162,7 @@ class DataProcesser:
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
         colnames.remove(self.col_class)
-        groups = set([i.split('_')[0] for i in colnames])
-        groups = list(groups)
+        groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
 
         # Initialize all dictionaries;
         # {'mu':{'groups_combined', 'groupA', 'groupB'}, 'sd':{'groups_combined', 'groupA', 'groupB'}, ...}
@@ -243,8 +244,7 @@ class DataProcesser:
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
         colnames.remove(self.col_class)
-        groups = set([i.split('_')[0] for i in colnames])
-        groups = list(groups)
+        groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
         groups_dict = {}
         for group in groups:
             groups_dict[group] = [i for i in colnames if search('^{0}_'.format(group), i)]
@@ -375,8 +375,7 @@ class DataProcesser:
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
         colnames.remove(col_class)
-        groups = set([i.split('_')[0] for i in colnames])
-        groups = list(groups)
+        groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
         groups_dict = {}
         for group in groups:
             groups_dict[group] = [i for i in colnames if search('^{0}_'.format(group), i)]
