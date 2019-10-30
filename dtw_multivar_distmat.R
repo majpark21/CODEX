@@ -13,6 +13,7 @@ library(argparse, lib.loc = library.path)
 library(data.table, lib.loc = library.path)
 suppressMessages(library(proxy, lib.loc = library.path))
 suppressMessages(library(dtw, lib.loc = library.path))
+suppressMessages(library(parallelDist, lib.loc = library.path))
 
 # Parsing arguments ----------------------------------------------
 parser <- ArgumentParser(description="A script to build a distance matrix with DTW and multivariate time-series.")
@@ -41,22 +42,20 @@ if(is.null(col_id) | col_id == "NULL"){
 }
 dt_split <- split(dt, dt$pattID)  # list of DTs
 dt_split <- lapply(dt_split, function(x) x[, pattID := NULL])
-dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=len, ncol=nchannel))  # reshape time on row, channel on columns
+dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=nchannel, ncol=len, byrow = T))  # reshape time on column, channel on rows
+dt_split <- lapply(dt_split, function(x) x[, colSums(is.na(x)) == 0]) # clip time points with NAs (speeds up dtw a lot)
 
-dist_mat <- matrix(-1, nrow=length(dt_split), ncol=length(dt_split))
-pb <- txtProgressBar(min=1, max=length(dt_split)-1, initial = 1, style=3 )
-for(i in 1:(length(dt_split)-1)){
-  setTxtProgressBar(pb,i)
-  for(j in (i+1):length(dt_split)){
-    if(normDist){
-      dist_mat[i,j] <- dtw(x=na.omit(dt_split[[i]]), y=na.omit(dt_split[[j]]), distance.only = TRUE)$normalizedDistance	# dtw doesn't allow NAs
-    } else {
-      dist_mat[i,j] <- dtw(x=na.omit(dt_split[[i]]), y=na.omit(dt_split[[j]]), distance.only = TRUE)$distance  # dtw doesn't allow NAs
-    }
-  }
-}
-# For consistency with dtaidistance
+norm_method <- ifelse(normDist, "path.length", "")
+dist_mat <- parDist(dt_split, method="dtw", step.pattern="symmetric2", norm.method = norm_method, window.size = 1)
+
+# Save dist object
+dist_mat <- as.matrix(dist_mat)
+rownames(dist_mat) <- colnames(dist_mat) <- dt[, pattID]
+dist_mat <- as.dist(dist_mat)
+saveRDS(dist_mat, paste0(outfile, ".rds"))
+
+# Save dist matrix
+dist_mat <- as.matrix(dist_mat)
 diag(dist_mat) <- Inf
 dist_mat[lower.tri(dist_mat)] <- Inf
-
-suppressMessages(fwrite(dist_mat, outfile, sep = ",", row.names = FALSE, col.names = FALSE))
+suppressMessages(fwrite(dist_mat, paste0(outfile, ".csv.gz"), sep = ",", row.names = FALSE, col.names = FALSE))
