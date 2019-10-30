@@ -46,7 +46,7 @@ dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=nchannel, ncol=l
 dt_split <- lapply(dt_split, function(x) x[, colSums(is.na(x)) == 0]) # clip time points with NAs (speeds up dtw a lot)
 
 norm_method <- ifelse(normDist, "path.length", "")
-dist_mat <- parDist(dt_split, method="dtw", step.pattern="symmetric2", norm.method = norm_method, window.size = 1)
+dist_mat <- parDist(dt_split, method="dtw", step.pattern="symmetric2", norm.method = norm_method)
 
 # Save dist object
 dist_mat <- as.matrix(dist_mat)
