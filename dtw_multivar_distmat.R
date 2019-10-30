@@ -16,21 +16,29 @@ suppressMessages(library(dtw, lib.loc = library.path))
 
 # Parsing arguments ----------------------------------------------
 parser <- ArgumentParser(description="A script to build a distance matrix with DTW and multivariate time-series.")
-parser$add_argument("-i", "--infile", type="character", help="Path to the file containing the patterns. A table with one pattern per row, channels concatenated.")
-parser$add_argument("-o", "--outfile", type="character", help="Path to the output file containing the distance matrix.")
-parser$add_argument("-l", "--length", type="integer", help="Length of time-series.")
-parser$add_argument("-n", "--nchannel", type="integer", help="Number of channels in the timeseries.")
+parser$add_argument("-i", "--infile", type="character", help="Character. Path to the file containing the patterns. A table with one pattern per row, channels concatenated and of same length.")
+parser$add_argument("-o", "--outfile", type="character", help="Character. Path to the output file containing the distance matrix.")
+parser$add_argument("-l", "--length", type="integer", help="Integer. Length of time-series.")
+parser$add_argument("-n", "--nchannel", type="integer", help="Integer. Number of channels in the timeseries.")
+parser$add_argument("--norm", type="logical", default=TRUE, help="Logical. Whether to normalize distances to series length. Default to TRUE.")
+parser$add_argument("--colid", type="character", default=NULL, help="Character. Name of ID column. Must be provided if present. default to NULL.")
 
 args <- parser$parse_args()
+print(args)
 infile <- args$infile
 outfile <- args$outfile
 len <- args$length
 nchannel <- args$nchannel
-normDist <- TRUE
+normDist <- args$norm
+col_id <- args$colid
 
 dt <- fread(infile)
 # Build distance matrix, DTW in multivariate case ----------------
-dt[, pattID := 1:nrow(dt)]
+if(is.null(col_id) | col_id == "NULL"){
+  dt[, pattID := 1:nrow(dt)]
+} else {
+  setnames(dt, col_id, "pattID")
+}
 dt_split <- split(dt, dt$pattID)  # list of DTs
 dt_split <- lapply(dt_split, function(x) x[, pattID := NULL])
 dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=len, ncol=nchannel))  # reshape time on row, channel on columns

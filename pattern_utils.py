@@ -189,7 +189,7 @@ def longest_segments(array, k=None, structure=None):
     for different behaviour. Output is a dictionary where values are the size of the segment and keys are tuples that
     indicate all the positions of a segment, just like numpy.where(). So can use the keys to directly subset an numpy
     array at the positions of the segments."""
-    assert np.all(np.unique(array) == np.array([0,1]))
+    assert np.all(np.unique(array) == np.array([0,1])) or np.all(np.unique(array) == np.array([0])) or np.all(np.unique(array) == np.array([1]))
     # Label each segment with a different integer, 0s are NOT labeled (i.e. remain 0)
     array_segments, num_segments = label(array, structure=structure)
     label_segments, size_segments = np.unique(array_segments, return_counts=True)
