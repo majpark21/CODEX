@@ -21,22 +21,48 @@ parser$add_argument("-i", "--infile", type="character", help="Character. Path to
 parser$add_argument("-o", "--outfile", type="character", help="Character. Path to the output file containing the distance matrix.")
 parser$add_argument("-l", "--length", type="integer", help="Integer. Length of time-series.")
 parser$add_argument("-n", "--nchannel", type="integer", help="Integer. Number of channels in the timeseries.")
+parser$add_argument("--center", type="logical", default=TRUE, help="Logical. Whether to zero-center the patterns before running DTW.")
 parser$add_argument("--norm", type="logical", default=TRUE, help="Logical. Whether to normalize distances to series length. Default to TRUE.")
 parser$add_argument("--colid", type="character", default=NULL, help="Character. Name of ID column. Must be provided if present. default to NULL.")
 
 args <- parser$parse_args()
-print(args)
+#print(args)
 infile <- args$infile
 outfile <- args$outfile
 len <- args$length
 nchannel <- args$nchannel
+center <- args$center
 normDist <- args$norm
 col_id <- args$colid
+
+# $center
+# [1] TRUE
+# 
+# $colid
+# [1] "pattID"
+# 
+# $infile
+# [1] "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.csv.gz"
+# 
+# $length
+# [1] 400
+# 
+# $nchannel
+# [1] 1
+# 
+# $norm
+# [1] TRUE
+# 
+# $outfile
+# [1] "output/ERK_AKT/local_patterns/tocompareDTW_uncorr_temp_dist_norm_allPooled.csv.gz"
+# infile <- "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.csv.gz"
+# length=400
+# nchannel=1
 
 dt <- fread(infile)
 # Build distance matrix, DTW in multivariate case ----------------
 if(is.null(col_id) | col_id == "NULL"){
-  dt[, pattID := 1:nrow(dt)]
+  dt[, pattID := as.character(1:nrow(dt))]
 } else {
   setnames(dt, col_id, "pattID")
 }
@@ -44,6 +70,9 @@ dt_split <- split(dt, dt$pattID)  # list of DTs
 dt_split <- lapply(dt_split, function(x) x[, pattID := NULL])
 dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=nchannel, ncol=len, byrow = T))  # reshape time on column, channel on rows
 dt_split <- lapply(dt_split, function(x) x[, colSums(is.na(x)) == 0]) # clip time points with NAs (speeds up dtw a lot)
+if(center){
+  dt_split <- lapply(dt_split, scale, center=TRUE, scale=FALSE)
+}
 
 norm_method <- ifelse(normDist, "path.length", "")
 dist_mat <- parDist(dt_split, method="dtw", step.pattern="symmetric2", norm.method = norm_method)
@@ -58,4 +87,4 @@ saveRDS(dist_mat, paste0(outfile, ".rds"))
 dist_mat <- as.matrix(dist_mat)
 diag(dist_mat) <- Inf
 dist_mat[lower.tri(dist_mat)] <- Inf
-suppressMessages(fwrite(dist_mat, paste0(outfile, ".csv.gz"), sep = ",", row.names = FALSE, col.names = FALSE))
+suppressMessages(fwrite(dist_mat, paste0(outfile, ".csv.gz"), sep = ",", row.names = FALSE, col.names = TRUE))

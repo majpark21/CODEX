@@ -139,7 +139,7 @@ def worst_classification_perclass(model, dataloader, n=10, device=None, softmax=
 def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, init_set='medoid', corr='pearson',
                          feature_layer='pool', device=None, labels_classes=None, seed=7):
     """
-    Return a set of least correlated trajectories for each class in a feature space returnes by CNN.
+    Return a set of least correlated trajectories for each class in a feature space returned by CNN.
     The procedure relies on a greedy algorithm that grows sets by adding least correlated trajectory until required
     number of trajectories is reached. A first step of trajectories selects trajectories that were correctly classified,
     optionally with a minimal level of confidence.
@@ -211,7 +211,8 @@ def least_correlated_set(model, dataloader, threshold_confidence=0.5, n=10, init
 
 
 if __name__ == '__main__':
-    data_file = 'data/ErkAkt_6GF_len240_repl2_trim100.zip'
+    #data_file = 'data/ErkAkt_6GF_len240_repl2_trim100.zip'
+    data_file = '/home/marc/Dropbox/Work/TSclass_GF/forPaper/data_figures/ErkAkt_forPaper_200trimmed.zip'
     model_file = 'forPaper/models/ERK_AKT/2019-07-04-11:21:58_ErkAkt_6GF_len240_repl2_trim100.pytorch'
     meas_var = ['ERK', 'AKT']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

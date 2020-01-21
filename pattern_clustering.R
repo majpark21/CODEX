@@ -21,8 +21,11 @@ parser$add_argument("-n", "--nchannel", type="integer", help="Number of channels
 parser$add_argument("-c", "--ncluster", type="integer", help="Number of clusters to cut the tree into.", default = 4)
 parser$add_argument("-m", "--nmedoid", type="integer", help="Number of medoids to extract and plot for each cluster.", default = 3)
 parser$add_argument("-t", "--npatt", type="integer", help="Number of random trajectories to plot for each cluster.", default = 16)
+parser$add_argument("--colid", type="character", default=NULL, help="Character. Name of ID column. Must be provided if present. default to NULL.")
+parser$add_argument("--linkage", type="character", default="complete", help="Character. Linkage method, one of: ward.D, ward.D2, single, complete, average, mcquitty, median or centroid. Default to complete.")
 
 args <- parser$parse_args()
+print(args)
 dist_file <- args$distfile
 patt_file <- args$pattfile
 out_file <- args$outfile
@@ -31,9 +34,25 @@ n_channel <- args$nchannel
 n_clust <- args$ncluster
 n_medoid <- args$nmedoid
 n_patt <- args$npatt
+col_id <- args$colid
+linkage <- args$linkage
+if(!linkage %in% c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median", "centroid")) {
+  stop("Linkage must be one of: ward.D, ward.D2, single, complete, average, mcquitty, median or centroid.")
+}
+
+# dist_file <- "output/ERK_AKT/local_patterns/uncorr_temp_dist_norm_allPooled.csv.gz.csv.gz"
+# patt_file <- "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.csv.gz"
+# out_file <- "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.pdf"
+# len <- 400
+# n_channel <- 2
+# n_clust <- 10
+# col_id <- "pattID"
+# n_medoid <- 3
+# n_patt <- 16
+# linkage <- "complete"
 
 ############## Clustering ----
-dist_mat <- fread(dist_file)
+dist_mat <- fread(dist_file, header = TRUE)
 dist_mat <- as.matrix(dist_mat)
 rownames(dist_mat) = colnames(dist_mat)
 
@@ -47,7 +66,7 @@ copy_up_low <- function(m) {
 dist_mat <- copy_up_low(dist_mat)
 dist_mat <- as.dist(dist_mat)
 
-tree <- hclust(dist_mat)
+tree <- hclust(dist_mat, method = linkage)
 cluster_idx <- stats::cutree(tree, k = n_clust)
 cluster_idx <- data.table(ID=names(cluster_idx), cluster_idx)
 cluster_idx[, ID := str_replace(ID, "^V", "ID_")]
@@ -55,9 +74,9 @@ cluster_idx[, ID := str_replace(ID, "^V", "ID_")]
 
 ############## Medoid of clusters ----
 # Get distance matrix in long format
-dist_mat <- fread(dist_file)
+dist_mat <- fread(dist_file, header = TRUE)
 dist_mat <- as.matrix(dist_mat)
-rownames(dist_mat) = colnames(dist_mat)
+rownames(dist_mat) <- colnames(dist_mat)
 dist_mat_long <- as.data.table(subset(melt(dist_mat), value!=Inf))
 setnames(dist_mat_long, c("Var1", "Var2", "value"), c("ID1", "ID2", "distance"))
 dist_mat_long[, c("ID1", "ID2") := list(str_replace(ID1, "^V", "ID_"), str_replace(ID2, "^V", "ID_"))]
@@ -109,14 +128,25 @@ setnames(medoids, "ID1", "ID")
 
 ############## Pattern plotting ----
 dt_patt <- fread(patt_file)
-dt_patt[, ID := paste0("ID_", 1:nrow(dt_patt))]
+if(is.null(col_id)){
+  dt_patt[, ID := as.character(1:nrow(dt_patt))]
+} else {
+  setnames(dt_patt, col_id, "ID")
+}
+time_max <- ceiling(len/n_channel)
+print(len)
+print(n_channel)
+print(time_max)
 
 # Plot sample from each cluster4x4 on different PDF pages
 dt_plot <- melt(dt_patt, id.vars = "ID")
 dt_plot[, Measure := str_extract(variable, "^[A-Za-z]+")][, Measure := factor(Measure, unique(Measure))]
 dt_plot[, Time := as.numeric(str_extract(variable, "[0-9]+$"))]
+print(dt_plot)
+dt_plot <- dt_plot[Time <= time_max]
+print(dt_plot)
 dt_plot <- merge(dt_plot, cluster_idx, by="ID")
-dt_plot[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
+#dt_plot[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 
 pdf(out_file)
 # Hclust plot
@@ -125,6 +155,7 @@ plot(tree_plot)
 # Medoid plot
 dt_medoid <- dt_plot[ID %in% medoids$ID]
 dt_medoid <- merge(dt_medoid, medoids, by=c("ID", "cluster_idx"))
+dt_medoid[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 p1 <- ggplot(dt_medoid, aes(x=Time, y=value)) +
   geom_line(aes(color=Measure)) +
   facet_grid(cluster_idx~rank) +

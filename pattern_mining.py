@@ -13,6 +13,7 @@ from skimage.filters import threshold_li, threshold_mean
 import os
 from itertools import chain
 from tqdm import tqdm
+import subprocess
 
 #%%
 ############################ Parameters ###################################
@@ -22,10 +23,10 @@ mode_series_selection = 'least_correlated'
 thresh_confidence = 0.5  # used in least_correlated mode to choose set of series with minimal classification confidence
 # patt_percmax_cam = 0.5  Replaced by Li threshold
 extend_patt = 5
-min_len_patt = 3
-max_len_patt = 400
-center_patt = True
-normalize_dtw = False
+min_len_patt = 40
+max_len_patt = 400  # length to divide by nchannel
+center_patt = False
+normalize_dtw = True
 
 export_perClass = False
 export_allPooled = True
@@ -143,14 +144,6 @@ for id_trajectory in selected_trajectories:
 
 print(report_filter)
 
-# Center patterns beforehand because DTW is sensitive to level, center channels independently
-if center_patt:
-    for classe in classes:
-        if len(store_patts[classe][0].shape) == 1:
-            store_patts[classe] = [i - np.nanmean(i) for i in store_patts[classe]]
-        if len(store_patts[classe][0].shape) == 2:
-            store_patts[classe] = [i - np.nanmean(i, axis=1, keepdims=True) for i in store_patts[classe]]
-
 # Dump patterns into csv
 if export_allPooled:
     concat_patts_allPooled = np.full((sum(map(len, store_patts.values())), len(meas_var) * max_len_patt), np.nan)
@@ -200,63 +193,94 @@ del store_patts, concat_patts_allPooled, concat_patts, model,\
 if export_perClass:
     for classe in classes:
         print('Building distance matrix for class: {} \n'.format(classe))
-        fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr_temp{}.csv.gz'.format(classe)
-        fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/uncorr_temp_dist_norm_{}.csv.gz'.format(classe)
+        fout_patt = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(
+            meas_var) + '/local_patterns/patt_uncorr_{}.csv.gz'.format(classe)
+        fout_dist = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(
+            meas_var) + '/local_patterns/uncorr_dist_norm_{}.csv.gz'.format(classe)
         if len(meas_var) == 1:
-            os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --colid {}'.format(fout_patt,
-                                                                                                               fout_dist,
-                                                                                                               max_len_patt,
-                                                                                                               1,
-                                                                                                               normalize_dtw,
-                                                                                                               "NULL"))
+            subprocess.call(
+                'Rscript --vanilla /home/marc/Dropbox/Work/TSclass_GF/dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --center {} --colid {}'.format(
+                    fout_patt,
+                    fout_dist,
+                    max_len_patt / len(meas_var),
+                    1,
+                    normalize_dtw,
+                    center_patt,
+                    "NULL"), shell=True)
         elif len(meas_var) >= 2:
-            os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --colid {}'.format(fout_patt,
-                                                                                                               fout_dist,
-                                                                                                               max_len_patt,
-                                                                                                               len(meas_var),
-                                                                                                               normalize_dtw,
-                                                                                                               "NULL"))
+            subprocess.call(
+                'Rscript --vanilla /home/marc/Dropbox/Work/TSclass_GF/dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --center {} --colid {}'.format(
+                    fout_patt,
+                    fout_dist,
+                    max_len_patt,
+                    len(meas_var),
+                    normalize_dtw,
+                    center_patt,
+                    "NULL"), shell=True)
+
 if export_allPooled:
     print('Building distance matrix for pooled data.')
-    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr_temp_allPooled.csv.gz'
-    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/tocompareDTW_uncorr_temp_dist_norm_allPooled.csv.gz'
+    fout_patt = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(
+        meas_var) + '/local_patterns/patt_uncorr_allPooled.csv.gz'
+    fout_dist = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(
+        meas_var) + '/local_patterns/uncorr_dist_norm_allPooled.csv.gz'
     if len(meas_var) == 1:
-        os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --colid {}'.format(fout_patt,
-                                                                                                           fout_dist,
-                                                                                                           max_len_patt,
-                                                                                                           1,
-                                                                                                           normalize_dtw,
-                                                                                                           "pattID"))
+        subprocess.call(
+            'Rscript --vanilla /home/marc/Dropbox/Work/TSclass_GF/dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --center {} --colid {}'.format(
+                fout_patt,
+                fout_dist,
+                max_len_patt,
+                1,
+                normalize_dtw,
+                center_patt,
+                "pattID"), shell=True)
     elif len(meas_var) >= 2:
-        os.system('Rscript dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --colid {}'.format(fout_patt,
-                                                                                                           fout_dist,
-                                                                                                           max_len_patt,
-                                                                                                           len(
-                                                                                                               meas_var),
-                                                                                                           normalize_dtw,
-                                                                                                           "pattID"))
+        subprocess.call(
+            'Rscript --vanilla /home/marc/Dropbox/Work/TSclass_GF/dtw_multivar_distmat.R -i "{}" -o "{}" -l {} -n {} --norm {} --center {}  --colid {}'.format(
+                fout_patt,
+                fout_dist,
+                max_len_patt,
+                len(
+                    meas_var),
+                normalize_dtw,
+                center_patt,
+                "pattID"), shell=True)
 
 print('Distance matrices built.')
 #%%
-################################# Cluster patterns and plot results ####################################################
-nclust = 4
-nmedoid = 3
-nseries = 16
-for classe in classes:
-    print('Cluster patterns for class: {} \n'.format(classe))
-    fout_patt = 'output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr_temp{}.csv'.format(classe)
-    fout_dist = 'output/' + '_'.join(meas_var) + '/local_patterns/uncorr_temp_dist_norm_{}.csv'.format(classe)
-    fout_plot = 'output/' + '_'.join(meas_var) + '/local_patterns/uncorr_temp_pattPlot_{}.pdf'.format(classe)
-    os.system('Rscript pattern_clustering.R -d {} -p {} -o {} -l {} -n {} -c{} -m {} -t {}'.format(fout_dist,
-                                                                                                   fout_patt,
-                                                                                                   fout_plot,
-                                                                                                   max_len_patt,
-                                                                                                   len(meas_var),
-                                                                                                   nclust,
-                                                                                                   nmedoid,
-                                                                                                   nseries))
-
-print('Clustering done.')
+# ################################# Cluster patterns and plot results ####################################################
+# nclust = 4
+# nmedoid = 3
+# nseries = 16
+#
+# if export_perClass:
+#     for classe in classes:
+#         print('Cluster patterns for class: {} \n'.format(classe))
+#         fout_patt = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr_{}.csv.gz'.format(classe)
+#         fout_dist = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(meas_var) + '/local_patterns/uncorr_dist_norm_{}.csv.gz.csv.gz'.format(classe)
+#         fout_plot = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(meas_var) + '/local_patterns/uncorr_pattPlot_{}.pdf'.format(classe)
+#         subprocess.call('Rscript --vanilla /home/marc/Dropbox/Work/TSclass_GF/pattern_clustering.R -d {} -p {} -o {} -l {} -n {} -c{} -m {} -t {}'.format(fout_dist,
+#                                                                                                        fout_patt,
+#                                                                                                        fout_plot,
+#                                                                                                        max_len_patt,
+#                                                                                                        len(meas_var),
+#                                                                                                        nclust,
+#                                                                                                        nmedoid,
+#                                                                                                        nseries), shell=True)
+#
+# if export_allPooled:
+#     fout_patt = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(meas_var) + '/local_patterns/patt_uncorr_allPooled.csv.gz'
+#     fout_dist = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(meas_var) + '/local_patterns/uncorr_dist_norm_allPooled.csv.gz.csv.gz'
+#     fout_plot = '/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/' + '_'.join(meas_var) + '/local_patterns/uncorr_pattPlot_allPooled.pdf'.format(classe)
+#     subprocess.call('Rscript --vanilla /home/marc/Dropbox/Work/TSclass_GF/pattern_clustering.R -d {} -p {} -o {} -l {} -n {} -c{} -m {} -t {}'.format(fout_dist,
+#                                                                                                fout_patt,
+#                                                                                                fout_plot,
+#                                                                                                max_len_patt,
+#                                                                                                len(meas_var),
+#                                                                                                nclust,
+#                                                                                                nmedoid,
+#                                                                                                nseries), shell=True)
+# print('Clustering done.')
 #%%
 ####### Alternative: Build distance matrix between patterns (only univariate case, otherwise use R dtw package) ########
 #dist_matrix = {i:[] for i in classes}
