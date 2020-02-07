@@ -13,6 +13,7 @@ from collections import OrderedDict
 
 
 #TODO: make a single dataset class for both bi and univariate
+#TODO: when exporting random crop positions, ToTensor() must be called right after RandomCrop(), modify this to have it in __getitem__
 class myDataset(Dataset):
     """Standard dataset object with ID, class"""
 
@@ -126,9 +127,15 @@ class ToTensor(object):
 
     def __call__(self, sample):
         series, label, identifier = sample['series'], sample['label'], sample['identifier']
-        return {'series': torch.from_numpy(series),
-                'label': torch.from_numpy(label),
-                'identifier': identifier}
+        if 'crop' in sample.keys():
+            return {'series': torch.from_numpy(series),
+                    'label': torch.from_numpy(label),
+                    'identifier': identifier,
+                    'crop': sample['crop']}
+        else:
+            return {'series': torch.from_numpy(series),
+                    'label': torch.from_numpy(label),
+                    'identifier': identifier}
 
 
 class Subtract(object):
@@ -230,10 +237,11 @@ class RandomCrop(object):
         channel will be used to determine the tails, so it WILL RETURN ERROR if NA tails are not aligned across channels
     """
 
-    def __init__(self, output_size, ignore_na_tails=True):
+    def __init__(self, output_size, ignore_na_tails=True, export_crop_pos=False):
         assert isinstance(output_size, int)
         self.output_size = output_size
         self.ignore_na_tails = ignore_na_tails
+        self.export_crop_pos = export_crop_pos
 
     def __call__(self, sample):
         series, label, identifier = sample['series'], sample['label'], sample['identifier']
@@ -250,9 +258,15 @@ class RandomCrop(object):
             left = np.random.randint(0, length - new_length)
         series = series[:, left : left + new_length]
 
-        return {'series': series,
-                'label': label,
-                'identifier': identifier}
+        if self.export_crop_pos:
+            return {'series': series,
+                    'label': label,
+                    'identifier': identifier,
+                    'crop': (left, left + new_length)}
+        else:
+            return {'series': series,
+                    'label': label,
+                    'identifier': identifier}
 
 
 class FixedCrop(object):
