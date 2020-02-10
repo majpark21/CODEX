@@ -40,12 +40,12 @@ if(!linkage %in% c("ward.D", "ward.D2", "single", "complete", "average", "mcquit
   stop("Linkage must be one of: ward.D, ward.D2, single, complete, average, mcquitty, median or centroid.")
 }
 
-# dist_file <- "output/ERK_AKT/local_patterns/uncorr_temp_dist_norm_allPooled.csv.gz.csv.gz"
-# patt_file <- "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.csv.gz"
-# out_file <- "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.pdf"
+# dist_file <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/ERK_AKT/local_patterns/uncorr_dist_norm_allPooled.csv.gz"
+# patt_file <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/ERK_AKT/local_patterns/patt_uncorr_allPooled.csv.gz"
+# out_file <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/ERK_AKT/local_patterns/patt_uncorr_allPooled.pdf"
 # len <- 400
 # n_channel <- 2
-# n_clust <- 10
+# n_clust <- 5
 # col_id <- "pattID"
 # n_medoid <- 3
 # n_patt <- 16
@@ -68,8 +68,8 @@ dist_mat <- as.dist(dist_mat)
 
 tree <- hclust(dist_mat, method = linkage)
 cluster_idx <- stats::cutree(tree, k = n_clust)
-cluster_idx <- data.table(ID=names(cluster_idx), cluster_idx)
-cluster_idx[, ID := str_replace(ID, "^V", "ID_")]
+cluster_idx <- data.table(pattID=names(cluster_idx), cluster_idx)
+cluster_idx[, pattID := str_replace(pattID, "^V", "pattID_")]
 
 
 ############## Medoid of clusters ----
@@ -78,8 +78,8 @@ dist_mat <- fread(dist_file, header = TRUE)
 dist_mat <- as.matrix(dist_mat)
 rownames(dist_mat) <- colnames(dist_mat)
 dist_mat_long <- as.data.table(subset(melt(dist_mat), value!=Inf))
-setnames(dist_mat_long, c("Var1", "Var2", "value"), c("ID1", "ID2", "distance"))
-dist_mat_long[, c("ID1", "ID2") := list(str_replace(ID1, "^V", "ID_"), str_replace(ID2, "^V", "ID_"))]
+setnames(dist_mat_long, c("Var1", "Var2", "value"), c("pattID1", "pattID2", "distance"))
+dist_mat_long[, c("pattID1", "pattID2") := list(str_replace(pattID1, "^V", "pattID_"), str_replace(pattID2, "^V", "pattID_"))]
 
 medoid_cluster <- function(dists, clusts, nmed, permut_ids=TRUE){
   # Clusts: data.table with 2 columns ID and cluster_idx
@@ -87,17 +87,17 @@ medoid_cluster <- function(dists, clusts, nmed, permut_ids=TRUE){
   med_list <- list()
   i <- 1
   for(clust in unique(clusts$cluster_idx)){
-    id_clust <- clusts[cluster_idx==clust, ID]
+    id_clust <- clusts[cluster_idx==clust, pattID]
     # Subset only distances relative to the cluster
-    clust_dist <- dists[ID1 %in% id_clust & ID2 %in% id_clust]
+    clust_dist <- dists[pattID1 %in% id_clust & pattID2 %in% id_clust]
     # Permute IDs and append if only one order is present in the distance matrix
     if(permut_ids){
       permuted <- copy(clust_dist)
-      setnames(permuted, c("ID1", "ID2"), c("ID2", "ID1"))
+      setnames(permuted, c("pattID1", "pattID2"), c("pattID2", "pattID1"))
       clust_dist <- rbindlist(list(clust_dist, permuted), use.names = FALSE)
     }
     # Keep ids that have minimal median distance to all others
-    med_distance <- clust_dist[, .(med_dist=median(distance)), by=ID1]
+    med_distance <- clust_dist[, .(med_dist=median(distance)), by=pattID1]
     setkey(med_distance, med_dist)
     med_distance <- med_distance[1:nmed]
     med_distance[, cluster_idx := clust]
@@ -110,28 +110,28 @@ medoid_cluster <- function(dists, clusts, nmed, permut_ids=TRUE){
 
 medoids <- medoid_cluster(dists = dist_mat_long, clusts = cluster_idx, nmed = n_medoid)
 medoids[, rank := 1:nrow(.SD), by=cluster_idx]
-setnames(medoids, "ID1", "ID")
+setnames(medoids, "pattID1", "pattID")
 
 
 ############# SOM ----
-#dt_patt <- fread(patt_file)
-#mat_patt <- as.matrix(dt_patt)
-#mygrid <- somgrid(xdim=5, ydim=3, topo="rectangular")
-#som_patt <- som(mat_patt, maxNA.fraction=0.75, grid=mygrid)
-#plot(som_patt, type="changes")
-#plot(som_patt, type="count")
-#plot(som_patt)
-#palet <- rainbow(n_clust)
-#plot(som_patt, type="mapping", bgcol = palet[stats::cutree(tree, k = n_clust)], main = "Clusters") 
+# dt_patt <- fread(patt_file)
+# mat_patt <- as.matrix(dt_patt[,2:ncol(dt_patt)])
+# mygrid <- somgrid(xdim=5, ydim=3, topo="rectangular")
+# som_patt <- som(mat_patt, maxNA.fraction=0.75, grid=mygrid)
+# plot(som_patt, type="changes")
+# plot(som_patt, type="count")
+# plot(som_patt)
+# palet <- rainbow(n_clust)
+# plot(som_patt, type="mapping", bgcol = palet[stats::cutree(tree, k = n_clust)], main = "Clusters")
  
 
 
 ############## Pattern plotting ----
 dt_patt <- fread(patt_file)
-if(is.null(col_id)){
-  dt_patt[, ID := as.character(1:nrow(dt_patt))]
+if(is.null(col_id) | col_id == "NULL"){
+  dt_patt[, pattID := as.character(1:nrow(dt_patt))]
 } else {
-  setnames(dt_patt, col_id, "ID")
+  setnames(dt_patt, col_id, "pattID")
 }
 time_max <- ceiling(len/n_channel)
 print(len)
@@ -139,13 +139,13 @@ print(n_channel)
 print(time_max)
 
 # Plot sample from each cluster4x4 on different PDF pages
-dt_plot <- melt(dt_patt, id.vars = "ID")
+dt_plot <- melt(dt_patt, id.vars = "pattID")
 dt_plot[, Measure := str_extract(variable, "^[A-Za-z]+")][, Measure := factor(Measure, unique(Measure))]
 dt_plot[, Time := as.numeric(str_extract(variable, "[0-9]+$"))]
 print(dt_plot)
 dt_plot <- dt_plot[Time <= time_max]
 print(dt_plot)
-dt_plot <- merge(dt_plot, cluster_idx, by="ID")
+dt_plot <- merge(dt_plot, cluster_idx, by="pattID")
 #dt_plot[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 
 pdf(out_file)
@@ -153,27 +153,27 @@ pdf(out_file)
 tree_plot <- dendextend::color_branches(as.dendrogram(tree), k = n_clust, groupLabels = F)
 plot(tree_plot)
 # Medoid plot
-dt_medoid <- dt_plot[ID %in% medoids$ID]
-dt_medoid <- merge(dt_medoid, medoids, by=c("ID", "cluster_idx"))
+dt_medoid <- dt_plot[pattID %in% medoids$pattID]
+dt_medoid <- merge(dt_medoid, medoids, by=c("pattID", "cluster_idx"))
 dt_medoid[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 p1 <- ggplot(dt_medoid, aes(x=Time, y=value)) +
   geom_line(aes(color=Measure)) +
   facet_grid(cluster_idx~rank) +
-  geom_label(aes(label = round(med_dist, 3)), x=max(dt_medoid$Time)-5, y=min(dt_medoid$value, na.rm=T) + 0.1) +
+  # geom_label(aes(label = round(med_dist, 3)), x=max(dt_medoid$Time)-5, y=min(dt_medoid$value, na.rm=T) + 0.1) +
   theme_bw() +
   ggtitle(paste0("Top ", as.character(n_medoid), " medoids of the ", as.character(n_clust), " clusters"))
 plot(p1)
 for(i in unique(dt_plot[, cluster_idx])){
-  if(length(unique(dt_plot[cluster_idx == i, ID])) < n_patt){
-    n_patt_plot <- length(unique(dt_plot[cluster_idx == i, ID]))
+  if(length(unique(dt_plot[cluster_idx == i, pattID])) < n_patt){
+    n_patt_plot <- length(unique(dt_plot[cluster_idx == i, pattID]))
   } else {
     n_patt_plot <- n_patt
   }
   # Pattern plot
-  traj_to_plot <- sample(unique(dt_plot[cluster_idx == i, ID]), n_patt_plot, replace = F)
-  p2 <- ggplot(dt_plot[ID %in% traj_to_plot], aes(x = Time, y=value)) +
+  traj_to_plot <- sample(unique(dt_plot[cluster_idx == i, pattID]), n_patt_plot, replace = F)
+  p2 <- ggplot(dt_plot[pattID %in% traj_to_plot], aes(x = Time, y=value)) +
     geom_line(aes(color=Measure)) +
-    facet_wrap("ID") +
+    facet_wrap("pattID") +
     theme_bw() +
     ggtitle(paste0("Cluster number: ", i))
   plot(p2)

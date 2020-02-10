@@ -218,13 +218,21 @@ def extract_pattern(origin_array, coord_tuple, NA_fill = True):
     maintained.
     """
     assert len(origin_array.shape) == 1 or len(origin_array.shape) == 2
-    assert len(coord_tuple) == 2
+    assert len(origin_array.shape) == len(coord_tuple)
     if NA_fill:
         out = np.full_like(origin_array, np.nan)
-        out[coord_tuple] = origin_array[coord_tuple]
-        out = out[:, np.min(coord_tuple[1]): (np.max(coord_tuple[1]) + 1)]
-    else:
+        if len(origin_array.shape) == 1:
+            out[coord_tuple] = origin_array[coord_tuple]
+            out = out[np.min(coord_tuple[1]) : (np.max(coord_tuple[1]) + 1)]
+        elif len(origin_array.shape) == 2:
+            out[coord_tuple] = origin_array[coord_tuple]
+            out = out[:, np.min(coord_tuple[1]) : (np.max(coord_tuple[1]) + 1)]
+
+    elif len(origin_array.shape) == 1:
+        out = origin_array[np.min(coord_tuple) : (np.max(coord_tuple)+1)]
+    elif len(origin_array.shape) == 2:
         out = origin_array[:, np.min(coord_tuple[1]) : (np.max(coord_tuple[1])+1)]
+
     return  out
 
 

@@ -24,6 +24,8 @@ parser$add_argument("-n", "--nchannel", type="integer", help="Integer. Number of
 parser$add_argument("--center", type="logical", default=TRUE, help="Logical. Whether to zero-center the patterns before running DTW.")
 parser$add_argument("--norm", type="logical", default=TRUE, help="Logical. Whether to normalize distances to series length. Default to TRUE.")
 parser$add_argument("--colid", type="character", default=NULL, help="Character. Name of ID column. Must be provided if present. default to NULL.")
+parser$add_argument("--csv", type="logical", default=TRUE, help="Logical. Whether to export the distance matrix as a compressed csv.")
+parser$add_argument("--rds", type="logical", default=TRUE, help="Logical. Whether to export the distance matrix as an rds R object.")
 
 args <- parser$parse_args()
 #print(args)
@@ -34,6 +36,8 @@ nchannel <- args$nchannel
 center <- args$center
 normDist <- args$norm
 col_id <- args$colid
+exp_csv <- args$csv
+exp_rds <- args$rds
 
 # $center
 # [1] TRUE
@@ -81,10 +85,10 @@ dist_mat <- parDist(dt_split, method="dtw", step.pattern="symmetric2", norm.meth
 dist_mat <- as.matrix(dist_mat)
 rownames(dist_mat) <- colnames(dist_mat) <- dt[, pattID]
 dist_mat <- as.dist(dist_mat)
-saveRDS(dist_mat, paste0(outfile, ".rds"))
+if(exp_rds) saveRDS(dist_mat, paste0(outfile, ".rds"))
 
 # Save dist matrix
 dist_mat <- as.matrix(dist_mat)
 diag(dist_mat) <- Inf
 dist_mat[lower.tri(dist_mat)] <- Inf
-suppressMessages(fwrite(dist_mat, paste0(outfile, ".csv.gz"), sep = ",", row.names = FALSE, col.names = TRUE))
+if(exp_csv) suppressMessages(fwrite(dist_mat, paste0(outfile, ".csv.gz"), sep = ",", row.names = FALSE, col.names = TRUE))
