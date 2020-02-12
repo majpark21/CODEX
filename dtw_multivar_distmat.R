@@ -21,11 +21,11 @@ parser$add_argument("-i", "--infile", type="character", help="Character. Path to
 parser$add_argument("-o", "--outfile", type="character", help="Character. Path to the output file containing the distance matrix.")
 parser$add_argument("-l", "--length", type="integer", help="Integer. Length of time-series.")
 parser$add_argument("-n", "--nchannel", type="integer", help="Integer. Number of channels in the timeseries.")
-parser$add_argument("--center", type="logical", default=TRUE, help="Logical. Whether to zero-center the patterns before running DTW.")
-parser$add_argument("--norm", type="logical", default=TRUE, help="Logical. Whether to normalize distances to series length. Default to TRUE.")
+parser$add_argument("--center", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to zero-center the patterns before running DTW.")
+parser$add_argument("--norm", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to normalize distances to series length. Default to TRUE.")
 parser$add_argument("--colid", type="character", default=NULL, help="Character. Name of ID column. Must be provided if present. default to NULL.")
-parser$add_argument("--csv", type="logical", default=TRUE, help="Logical. Whether to export the distance matrix as a compressed csv.")
-parser$add_argument("--rds", type="logical", default=TRUE, help="Logical. Whether to export the distance matrix as an rds R object.")
+parser$add_argument("--csv", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to export the distance matrix as a compressed csv.")
+parser$add_argument("--rds", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to export the distance matrix as an rds R object.")
 
 args <- parser$parse_args()
 #print(args)
@@ -33,47 +33,43 @@ infile <- args$infile
 outfile <- args$outfile
 len <- args$length
 nchannel <- args$nchannel
-center <- args$center
-normDist <- args$norm
+center <- ifelse(args$center %in% c("T", "TRUE", "True"), TRUE, FALSE)
+normDist <- ifelse(args$norm %in% c("T", "TRUE", "True"), TRUE, FALSE)
 col_id <- args$colid
-exp_csv <- args$csv
-exp_rds <- args$rds
+exp_csv <- ifelse(args$csv %in% c("T", "TRUE", "True"), TRUE, FALSE)
+exp_rds <- ifelse(args$rds %in% c("T", "TRUE", "True"), TRUE, FALSE)
 
-# $center
-# [1] TRUE
-# 
-# $colid
-# [1] "pattID"
-# 
-# $infile
-# [1] "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.csv.gz"
-# 
-# $length
-# [1] 400
-# 
-# $nchannel
-# [1] 1
-# 
-# $norm
-# [1] TRUE
-# 
-# $outfile
-# [1] "output/ERK_AKT/local_patterns/tocompareDTW_uncorr_temp_dist_norm_allPooled.csv.gz"
-# infile <- "output/ERK_AKT/local_patterns/patt_uncorr_temp_allPooled.csv.gz"
-# length=400
-# nchannel=1
+
+# infile <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/FRST/local_patterns/patt_uncorr_A.csv.gz"
+# outfile <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/FRST/local_patterns/uncorr_dist_norm_A"
+# len <- 400
+# nchannel <-1
+# center <- F
+# normDist <-T
+# col_id <- "NULL"
+# exp_csv <- T
+# exp_rds <- T
 
 dt <- fread(infile)
-# Build distance matrix, DTW in multivariate case ----------------
 if(is.null(col_id) | col_id == "NULL"){
-  dt[, pattID := as.character(1:nrow(dt))]
+  dt[, pattID := paste0("patt_", as.character(1:nrow(dt)))]
 } else {
   setnames(dt, col_id, "pattID")
 }
+
+# parDist expects a simple matrix for univariate, list of matrices for multivariate. But in univariate case, still keep the list structure
+# otherwise problem with series of variable length: NAs are not allowed and clipping rows with NAs in a single matrix would remove time points
 dt_split <- split(dt, dt$pattID)  # list of DTs
 dt_split <- lapply(dt_split, function(x) x[, pattID := NULL])
-dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=nchannel, ncol=len, byrow = T))  # reshape time on column, channel on rows
-dt_split <- lapply(dt_split, function(x) x[, colSums(is.na(x)) == 0]) # clip time points with NAs (speeds up dtw a lot)
+dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=nchannel, ncol=len, byrow = T))  # reshape time on columns, channel on rows
+if(nchannel==1){
+  # otherwise get converted to vector in univariate case
+  dt_split <- lapply(dt_split, function(x) matrix(x[, colSums(is.na(x)) == 0], nrow=1))
+  #dt_split <- lapply(dt_split, function(x) rbind(x, rep(1, ncol(x))))
+} else {
+  dt_split <- lapply(dt_split, function(x) x[, colSums(is.na(x)) == 0]) # clip time points with NAs (speeds up dtw a lot)
+}
+
 if(center){
   dt_split <- lapply(dt_split, scale, center=TRUE, scale=FALSE)
 }

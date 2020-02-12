@@ -129,7 +129,7 @@ setnames(medoids, "pattID1", "pattID")
 ############## Pattern plotting ----
 dt_patt <- fread(patt_file)
 if(is.null(col_id) | col_id == "NULL"){
-  dt_patt[, pattID := as.character(1:nrow(dt_patt))]
+  dt_patt[, pattID := paste0("patt_", as.character(1:nrow(dt_patt)))]
 } else {
   setnames(dt_patt, col_id, "pattID")
 }
