@@ -42,7 +42,7 @@ class DataProcesser:
         tmp.export_processed(compress=True)
     """
 
-    def __init__(self, archive_path, col_id='ID', col_class='class', col_set='set', read_on_init=True):
+    def __init__(self, archive_path, col_id='ID', col_class='class', col_set='set', read_on_init=True, **kwargs):
         self.archive_path = archive_path
         self.archive = zipfile.ZipFile(self.archive_path, 'r')
         self.col_id = col_id
@@ -61,7 +61,7 @@ class DataProcesser:
         self.flag_process = False
         self.flag_split = False
         if read_on_init:
-            self.read_archive()
+            self.read_archive(**kwargs)
 
 
     def read_archive(self, datatable=True, **kwargs):
@@ -126,11 +126,47 @@ class DataProcesser:
         return None
 
 
-    def subset(self, sel_groups, start_time, end_time):
+    def detect_groups_times(self, return_groups=True, return_times=True, return_times_pergroup=True):
         """
-        Select only columns whose group matches and keep times within boundary
+        Detect the measurement groups and the time range spanned by these measurements.
+        :param return_groups: bool, whether to return the unique groups names.
+        :param return_times: bool, whether to return the global time range.
+        :param return_times_pergroup: bool, whether to return the time range per group.
+        :return: dict, with keys groups, times, times_pergroup.
+        """
+        if return_times_pergroup and not return_times:
+            return_times = True
+            warnings.warn('"return_times" is False but "return_times_pergroup" is True. "return_times" will be set to True.')
+        out = {}
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(self.col_id)
+        colnames.remove(self.col_class)
+        groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
+        if return_groups:
+            out['groups'] = groups
+        if return_times:
+            times = [int(i.split('_')[1]) for i in colnames]
+            out['times'] = [min(times), max(times)]
+            if return_times_pergroup:
+                out['times_pergroup'] = {}
+                for group in groups:
+                    group_columns = [i for i in colnames if search('^{0}_'.format(group), i)]
+                    group_times = [int(i.split('_')[1]) for i in group_columns]
+                    out['times_pergroup'][group] = [min(group_times), max(group_times)]
+        return out
+
+
+    def subset(self, sel_groups=None, start_time=None, end_time=None):
+        """
+        Select only columns whose group matches and keep times within boundary. Use None for auto detection
         :return: replace self.dataset with the subset, along with ID column
         """
+        if sel_groups is None:
+            sel_groups = self.detect_groups_times()['groups']
+        if start_time is None:
+            start_time = self.detect_groups_times()['times'][0]
+        if end_time is None:
+            end_time = self.detect_groups_times()['times'][1]
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
         colnames.remove(self.col_class)
