@@ -184,18 +184,20 @@ def extend_segments(array, max_ext, direction ='both'):
 
 
 def longest_segments(array, k=None, structure=None):
-    """Return the k longest segments with 1s in a binary array. Structure must be a valid argument of
+    """Return the k longest segments of 1s in a binary array. Structure must be a valid argument of
     scipy.ndimage.label. By default, segments can be connected vertically and horizontally, pass appropriate structure
     for different behaviour. Output is a dictionary where values are the size of the segment and keys are tuples that
     indicate all the positions of a segment, just like numpy.where(). So can use the keys to directly subset an numpy
     array at the positions of the segments."""
-    assert np.all(np.unique(array) == np.array([0,1])) or np.all(np.unique(array) == np.array([0])) or np.all(np.unique(array) == np.array([1]))
+    assert np.all(np.isin(array, [0,1]))
     # Label each segment with a different integer, 0s are NOT labeled (i.e. remain 0)
     array_segments, num_segments = label(array, structure=structure)
     label_segments, size_segments = np.unique(array_segments, return_counts=True)
-    # np.unique returns ordered values, so 0 is always first
-    label_segments = np.delete(label_segments, 0)
-    size_segments = np.delete(size_segments, 0)
+    # Special case when only 1s in the array
+    if not np.all(array==1):
+        # np.unique returns ordered values, so 0 is always first
+        label_segments = np.delete(label_segments, 0)
+        size_segments = np.delete(size_segments, 0)
     # Longest segments first, along with label
     sorted_segments = sorted(zip(size_segments, label_segments), reverse=True)
     if k:
