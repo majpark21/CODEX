@@ -28,11 +28,13 @@ def confusion_matrix(model, dataloader, device=None, labels_classes=None):
     :param labels_classes: a dictionary or pandas.Series to rename classes indexes.
     :return: A pandas DataFrame, actual classes in rows, predicted classes in columns.
     """
+    from pandas.api.types import CategoricalDtype
     df_out = model_output(model, dataloader, export_prob=True, export_feat=False, device=device)
     prob_cols = [col for col in df_out.columns if col.startswith('Prob_')]
     df_out['Prediction_colname'] = df_out[prob_cols].idxmax(axis=1)  # returns name of columns
     df_out['Prediction'] = df_out['Prediction_colname'].str.replace('^Prob_', '').astype('int')
-    confmat = pd.crosstab(df_out['Class'], df_out['Prediction'])
+    cat_type = CategoricalDtype(categories=sorted(df_out['Class'].unique()), ordered=True)
+    confmat = pd.crosstab(df_out['Class'].astype(cat_type), df_out['Prediction'].astype(cat_type), dropna=False)
     if labels_classes is not None:
         confmat.rename(labels_classes, axis='index', inplace=True)
         confmat.rename(labels_classes, axis='columns', inplace=True)
