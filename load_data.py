@@ -21,7 +21,8 @@ class DataProcesser:
         * archive_path :str: path to the data archive
         * archive :zipfile: object containing the archive
         * col_id :str: name of the column containing the series ID in .dataset and .id_set
-        * col_class :str: name of the column containing the series class in .dataset and .id_set
+        * col_class :str: name of the column containing the series class (dummy coded as integer starting at 0) in .dataset and .classes
+        * col_classname :str: name of the column containing the full name (i.e. not dummy coded) of the class in .classes
         * col_set :str: name of the column containing the series set (training|validation|test) in .id_set
         * dataset :DataFrame: observations (series) in rows, measurements in columns. Names of columns must have the format:
          A_1, A_2, A_3,..., C_1, C_2,... where A and C are groups (sensors) and 1,2,3... measurement time
@@ -42,11 +43,12 @@ class DataProcesser:
         tmp.export_processed(compress=True)
     """
 
-    def __init__(self, archive_path, col_id='ID', col_class='class', col_set='set', read_on_init=True, **kwargs):
+    def __init__(self, archive_path, col_id='ID', col_class='class', col_classname='class_name', col_set='set', read_on_init=True, **kwargs):
         self.archive_path = archive_path
         self.archive = zipfile.ZipFile(self.archive_path, 'r')
         self.col_id = col_id
         self.col_class = col_class
+        self.col_classname = col_classname
         self.col_set = col_set
         self.dataset = None
         self.dataset_cropped = None
@@ -77,10 +79,17 @@ class DataProcesser:
         :return: 2 pandas, one with raw data, one with IDs
         """
         if datatable:
-            from datatable import fread
-            self.dataset = fread(self.archive.open('dataset.csv'), **kwargs).to_pandas()
-            self.id_set = fread(self.archive.open('id_set.csv'), **kwargs).to_pandas()
-            self.classes = fread(self.archive.open('classes.csv'), **kwargs).to_pandas()
+            try:
+                from datatable import fread
+                self.dataset = fread(self.archive.open('dataset.csv'), **kwargs).to_pandas()
+                self.id_set = fread(self.archive.open('id_set.csv'), **kwargs).to_pandas()
+                self.classes = fread(self.archive.open('classes.csv'), **kwargs).to_pandas()
+            except ModuleNotFoundError:
+                warnings.warn('datatable module not found, using pandas instead. To prevent this message from appearing'
+                              ' use "datatable = False" when reading the archive.')
+                self.dataset = pd.read_csv(self.archive.open('dataset.csv'))
+                self.id_set = pd.read_csv(self.archive.open('id_set.csv'))
+                self.classes = pd.read_csv(self.archive.open('classes.csv'))
         else:
             self.dataset = pd.read_csv(self.archive.open('dataset.csv'))
             self.id_set = pd.read_csv(self.archive.open('id_set.csv'))
@@ -101,15 +110,17 @@ class DataProcesser:
         colnames_dataset.remove(self.col_class)
 
         if not self.col_id in self.dataset.columns.values:
-            warnings.warn('ID column is missing in dataset.')
+            warnings.warn('ID column "{}" is missing in dataset.'.format(self.col_id))
         if not self.col_id in self.id_set.columns.values:
-            warnings.warn('ID column is missing in id_set.')
+            warnings.warn('ID column "{}" is missing in id_set.'.format(self.col_id))
         if not self.col_class in self.dataset.columns.values:
-            warnings.warn('Class column not present in dataset.')
-        if not self.col_class in self.dataset.columns.values:
-            warnings.warn('Class column not present in classes.')
+            warnings.warn('Class column "{}" not present in dataset.'.format(self.col_class))
+        if not self.col_class in self.classes.columns.values:
+            warnings.warn('Class column "{}" not present in classes.'.format(self.col_class))
+        if not self.col_classname in self.classes.columns.values:
+            warnings.warn('Class name column "{}" not present in classes.'.format(self.col_classname))
         if not self.col_set in self.id_set.columns.values:
-            warnings.warn('Set column not present in id_set.')
+            warnings.warn('Set column "{}" not present in id_set.'.format(self.col_set))
         if self.dataset.select_dtypes(numerics).empty:
             warnings.warn('No numerical columns in dataset.')
         if len(list(set(self.dataset[self.col_id]) - set(self.id_set[self.col_id]))) != 0 or len(list(set(self.id_set[self.col_id]) - set(self.dataset[self.col_id]))) != 0:
@@ -382,7 +393,7 @@ class DataProcesser:
         return None
 
 
-    def crop_random(self, output_length,  group_crop=None, ignore_na_tails=True, col_id='ID', col_class='class'):
+    def crop_random(self, output_length,  group_crop=None, ignore_na_tails=True):
         """
         Returns a random subset of each row. Useful to get rid of NA tails. If "dataset" contains several groups, only one
         will be used to determine the range of cropping. So caution if NA tails are not strictly aligned across the groups.
@@ -410,7 +421,7 @@ class DataProcesser:
         # Use only the provided group to determine range of cropping
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
-        colnames.remove(col_class)
+        colnames.remove(self.col_class)
         groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
         groups_dict = {}
         for group in groups:
@@ -431,6 +442,7 @@ class DataProcesser:
                 row.reset_index(drop=True, inplace=True)
 
             # Concatenate all rows, add ID and class column
+            col_class, col_id = self.col_class, self.col_id
             group_cropped = pd.concat(new_rows, axis=1).T
             group_cropped.columns = ['{}_{}'.format(group,i) for i in range(group_cropped.shape[1])]
             group_cropped[col_id] = self.dataset[col_id]
