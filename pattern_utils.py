@@ -143,7 +143,7 @@ def create_cam(model, device, dataloader=None, id_series=None, array_series=None
 
     # Clip high values to improve map readability
     if clip:
-        np.clip(CAM, a_min=None, a_max=np.mean(CAM)+ clip*np.std(CAM), out=CAM)
+        np.clip(CAM, a_min=None, a_max=np.mean(CAM) + clip*np.std(CAM), out=CAM)
 
     return CAM
 

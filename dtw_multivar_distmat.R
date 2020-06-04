@@ -4,7 +4,7 @@
 # Output: a distance matrix with DTW on multivariate channels. Only upper part filled, the rest is set to Inf to be consistent
 # with dtaidistance dtw implementation
 
-user_lib <- "/home/marc/R/x86_64-pc-linux-gnu-library/3.6"
+user_lib <- "C:/Users/Marc/Documents/R/win-library/3.6"
 if(!dir.exists(user_lib)){
   stop(sprintf("User package library '%s' is not found. In 'dtw_multivariate_distmat.R' modify the variable user_lib to your user library directory.", user_lib))
 }
@@ -21,7 +21,7 @@ parser$add_argument("-i", "--infile", type="character", help="Character. Path to
 parser$add_argument("-o", "--outfile", type="character", help="Character. Path to the output file containing the distance matrix.")
 parser$add_argument("-l", "--length", type="integer", help="Integer. Length of time-series.")
 parser$add_argument("-n", "--nchannel", type="integer", help="Integer. Number of channels in the timeseries.")
-parser$add_argument("--center", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to zero-center the patterns before running DTW.")
+parser$add_argument("--center", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to zero-center the patterns before running DTW. Each channel of each pattern is centered independently.")
 parser$add_argument("--norm", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to normalize distances to series length. Default to TRUE.")
 parser$add_argument("--colid", type="character", default=NULL, help="Character. Name of ID column. Must be provided if present. default to NULL.")
 parser$add_argument("--csv", type="character", choices=c("T", "TRUE", "True", "F", "FALSE", "False"), default="T", help="Logical provided as character 'T' or 'F'. Whether to export the distance matrix as a compressed csv.")
@@ -71,10 +71,11 @@ if(nchannel==1){
 }
 
 if(center){
-  dt_split <- lapply(dt_split, scale, center=TRUE, scale=FALSE)
+  # scale works on matrix columns so transpose, center each channel indeptly and transpose back
+  dt_split <- lapply(dt_split, function(x) {t(scale(t(x), center=TRUE, scale=FALSE))})
 }
 
-norm_method <- ifelse(normDist, "path.length", "")
+norm_method <- ifelse(normDist, "n+m", "")
 dist_mat <- parDist(dt_split, method="dtw", step.pattern="symmetric2", norm.method = norm_method)
 
 # Save dist object
