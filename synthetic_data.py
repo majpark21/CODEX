@@ -9,10 +9,9 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import datetime
 
 def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseline = 0, sigma_noise = 0, seed = None,
-                  trunc = 'left', scale_peak = 1, noise_height = (1, 1), noise_width = (0.2, 0.2)):
+                  trunc = 'left', scale_peak = 1, noise_height = (1, 1), noise_width = (0.2, 0.2), min_dist = None):
     """
     Create a series with a mixture of Gaussians and truncated Gaussians.
     :param nseries: int, number of series.
@@ -20,13 +19,14 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
     for each peak, the direction of the truncation is chosen at random.
     :param scale_peak: float, adjust height of peak (default peak height is 1).
     :param noise_height: float 2-tuple, range from which to sample individual peak height.
-    :param noise_width: float 2-tuple, range from which to sample individual peak width.
+    :param noise_width: float 2-tuple, range from which to sample individual peak width (sigma of Gaussian peak).
     :param length: int, length of the series.
     :param npeak: int, total number of peaks (Gaussians AND truncated Gaussians) in the series
     :param prop_gaussian: float 2-tuple, range for the proportion of Gaussians.
     :param baseline: float, baseline level for the series
     :param sigma_noise: float, standard deviation of additive Gaussian noise.
     :param seed: int or None, seed for pseudo-random generators.
+    :param min_dist: int or None, minimum distance between peaks
     :return: A numpy array.
     """
     assert prop_gaussian[0] <= prop_gaussian[1]
@@ -38,15 +38,31 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
     np.random.seed(seed)
 
     # ------------------------------------------------------------------------------------------------------------------
+    # Function to generate peak positions with minimal distance constrain
+    def get_peak_pos(length, npeak, nseries, min_dist):
+        posPeak = np.random.randint(0, length, (nseries, npeak))
+        # Resample rows that don't respect the minimal distance until none is left
+        if min_dist:
+            rows_toResample = (np.array([1]))
+            while rows_toResample[0].size > 0:
+                posPeak = np.sort(posPeak, axis=1)  # Order each rows from 1st peak to last peak position
+                diffs = np.apply_along_axis(np.diff, 1, posPeak)  # Distance between consecutive peak pairs
+                mins = np.min(diffs, axis=1)
+                rows_toResample = np.where(mins < min_dist)
+                posPeak_Resample = np.random.randint(0, length, (len(rows_toResample[0]), npeak))
+                posPeak[rows_toResample] = posPeak_Resample
+        return posPeak
+
     # Function to create peaky trajectories
-    def create_peak_traj(length, npeak, nseries, trunc, noise_height, noise_width, scale_peak):
+    def create_peak_traj(posPeak, length, nseries, trunc, noise_height, noise_width, scale_peak):
+        ltrunc = []
         # Add Gaussian peaks at random position
         # Create one series per peak and sum up everything
-        posPeak = np.random.randint(0, length, (nseries, npeak))
         peak_data = np.zeros((nseries, length))
         x = np.arange(0, length)
         i = 0
         for pos_vec in posPeak:
+            trajDirtrunc = ''  # Create symbolic representation of truncations in the series
             trajGauss = []
             for pos in pos_vec:
                 height_peak = np.random.uniform(noise_height[0], noise_height[1])
@@ -54,19 +70,26 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
                 y = height_peak * np.exp(-((x-pos)**2)/(2*(sigma_peak**2)))
                 # Use peak position to find position of maxima
                 if trunc == 'both':
-                    trunc = np.random.choice(['left', 'right'])
-                if trunc == 'left':
+                    trunc_effective = np.random.choice(['left', 'right'])
+                elif trunc is None:
+                    trunc_effective = 'None'
+                else:
+                    trunc_effective = trunc
+                if trunc_effective == 'left':
                     y[:pos] = 0
-                elif trunc == 'right':
+                    trajDirtrunc = trajDirtrunc + 'L'
+                elif trunc_effective == 'right':
                     y[pos:] = 0
+                    trajDirtrunc = trajDirtrunc + 'R'
                 trajGauss.append(y)
             trajGauss = np.array(trajGauss)
+            ltrunc.append(trajDirtrunc)
             # Sum element-wise each peak trajectory
             peak_data[i, :] = np.sum(trajGauss, axis=0)
             i += 1
         #peak_data.clip(0.0001, out=peak_data)
         peak_data *= scale_peak
-        return peak_data, posPeak
+        return peak_data, ltrunc
 
     # ------------------------------------------------------------------------------------------------------------------
     # Peak part of the signal
@@ -74,12 +97,22 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
     range_nGauss = np.ceil(npeak * np.array(prop_gaussian)).astype('int')
     ltraj = []
     lpos = []
+    lngauss = []
+    ltrunc = []
+    # Generate trajectories one by one
     for i in range(nseries):
+        position_peaks = get_peak_pos(length=length, npeak=npeak, nseries=1, min_dist=min_dist).squeeze()
+        # Number of Gaussian and truncated peaks
         nGauss = np.random.choice(np.arange(range_nGauss[0], range_nGauss[1] + 1))
         nTrGauss = npeak - nGauss
-        trajGauss, posGauss = create_peak_traj(length=length, npeak=nGauss, nseries=1, trunc=None,
+        # Positions of Gaussian and truncated peaks, needs to be a 2D array
+        posGauss = np.random.choice(position_peaks, nGauss, replace=False)
+        posTrGauss = np.setdiff1d(position_peaks, posGauss)
+        posGauss = posGauss.reshape((1, nGauss))
+        posTrGauss = posTrGauss.reshape((1, nTrGauss))
+        trajGauss, dirTrunc = create_peak_traj(posPeak=posGauss, length=length, nseries=1, trunc=None,
                          noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
-        trajTrGauss, posTrGauss = create_peak_traj(length=length, npeak=nTrGauss, nseries=1, trunc=trunc,
+        trajTrGauss, dirTrunc = create_peak_traj(posPeak=posTrGauss, length=length, nseries=1, trunc=trunc,
                          noise_height=noise_height, noise_width=noise_width, scale_peak=scale_peak)
         ltraj.append(trajGauss + trajTrGauss)
         # Numpy cannot concatenate empty arrays
@@ -89,9 +122,13 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
             lpos.append(posGauss.squeeze())
         elif posTrGauss.size:
             lpos.append(posTrGauss.squeeze())
+        lngauss.append(nGauss)
+        ltrunc.append(dirTrunc)
     # One trajectory per row
     peak_data = np.vstack(ltraj)
     peak_pos = np.vstack(lpos)
+    peak_nGauss = np.vstack(lngauss)
+    peak_trunc = np.vstack(ltrunc)
 
     # ------------------------------------------------------------------------------------------------------------------
     # Noise part of the signal
@@ -100,7 +137,7 @@ def create_channel1(length, npeak, prop_gaussian = (0.5, 1), nseries = 1, baseli
     noise_data += baseline
 
     out = np.round(peak_data + noise_data, 4)
-    return out, peak_pos
+    return out, peak_pos, peak_nGauss, peak_trunc
 
 
 def create_channel2(chan1_mat, pos_mat, shift, height = -1, baseline = 0.0):
@@ -122,31 +159,43 @@ def create_channel2(chan1_mat, pos_mat, shift, height = -1, baseline = 0.0):
 # ----------------------------------------------------------------------------------------------------------------------
 # Create synthetic dataset with the 4 classes
 # Common parameters
-chan1_params = {'nseries': 10000,
+# chan1_params = {'nseries': 10000,
+#                 'length': 750,
+#                 'npeak': 4,
+#                 'noise_width': (15, 25),
+#                 'noise_height': (1, 1.5),
+#                 'scale_peak': 1,
+#                 'baseline': 0,
+#                 'sigma_noise': 0,
+#                 'trunc': 'both',
+#                 'seed': None}
+
+chan1_params = {'nseries': 2000,
                 'length': 750,
                 'npeak': 4,
                 'noise_width': (15, 25),
                 'noise_height': (1, 1.5),
-                'scale_peak' :1,
+                'scale_peak': 1,
                 'baseline': 0,
                 'sigma_noise': 0,
                 'trunc': 'both',
-                'seed': None}
+                'seed': None,
+                'min_dist': 75}
 
 # class A: More Gaussians, flat second channel
-chan1_A, pos_A = create_channel1(prop_gaussian=(0.5, 1), **chan1_params)
+chan1_A, pos_A, ngauss_A, trunc_A = create_channel1(prop_gaussian=(0.5, 1), **chan1_params)
 chan2_A = np.zeros_like(chan1_A) - 0.5
 
 # class B: More Truncated Gaussians, flat second channel
-chan1_B, pos_B = create_channel1(prop_gaussian=(0, 0.5), **chan1_params)
+chan1_B, pos_B, ngauss_B, trunc_B  = create_channel1(prop_gaussian=(0, 0.5), **chan1_params)
 chan2_B = np.zeros_like(chan1_A) - 0.5
 
 # class C: Equal mix of Gaussians and Truncated Gaussians, peak in second channel BEFORE peak in first channel
-chan1_C, pos_C = create_channel1(prop_gaussian=(0.5, 0.5), **chan1_params)
+chan1_C, pos_C, ngauss_C, trunc_C  = create_channel1(prop_gaussian=(0.5, 0.5), **chan1_params)
 chan2_C = create_channel2(chan1_mat=chan1_C, pos_mat=pos_C, shift=-30, baseline= -0.5, height=-1)
 
 # class D: Equal mix of Gaussians and Truncated Gaussians, peak in second channel AFTER peak in first channel
-chan1_D, pos_D = create_channel1(prop_gaussian=(0.5, 0.5), **chan1_params)
+chan1_D, pos_D, ngauss_D, trunc_D  = create_channel1(prop_gaussian=(0.5, 0.5), **chan1_params)
 chan2_D = create_channel2(chan1_mat=chan1_D, pos_mat=pos_D, shift=30, baseline= -0.5, height=-1)
 
 # Make dataframe formatted for CNN
@@ -160,6 +209,13 @@ df['class'] = np.repeat([0,1,2,3], chan1_params['nseries'])
 df['ID'] = ['A_'+ str(i) for i in range(chan1_params['nseries'])] + ['B_'+ str(i) for i in range(chan1_params['nseries'])] + ['C_'+ str(i) for i in range(chan1_params['nseries'])] + ['D_'+ str(i) for i in range(chan1_params['nseries'])]
 df = df[['ID', 'class'] + num_cols]
 df.to_csv('data/synthetic_dataset.csv', index=False)
+
+# Dataframe with infos on each curve
+df_infos = {'N_gaussian': np.concatenate((ngauss_A.squeeze(), ngauss_B.squeeze(), ngauss_C.squeeze(), ngauss_D.squeeze())).squeeze(),
+            'Direction_truncation': np.concatenate((trunc_A, trunc_B, trunc_C, trunc_D)).squeeze()}
+df_infos = pd.DataFrame.from_dict(df_infos)
+df_infos['ID'] = ['A_'+ str(i) for i in range(chan1_params['nseries'])] + ['B_'+ str(i) for i in range(chan1_params['nseries'])] + ['C_'+ str(i) for i in range(chan1_params['nseries'])] + ['D_'+ str(i) for i in range(chan1_params['nseries'])]
+df_infos.to_csv('data/synthetic_infos.csv', index = False)
 
 #-----------------------------------------------------------------------------------------------------------------------
 # Split ids
@@ -176,18 +232,19 @@ df_set.to_csv('data/synthetic_id_set.csv', index=False)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # DF with class IDs
-df_class = pd.DataFrame({'class_ID': [0,1,2,3], 'class':['A', 'B', 'C', 'D']})
+df_class = pd.DataFrame({'class': [0, 1, 2, 3],
+                         'class_name':['Most_Gauss_noChan2', 'Most_Trunc_noChan2', 'C_HalfGauss_earlyChan2', 'D_HalfGauss_lateChan2']})
 df_class.to_csv('data/synthetic_classes.csv', index=False)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Plot a sample
 
-# ncol = 3
-# nrow = 3
-# for chan1, chan2, classe in zip(chans1, chans2, ['class_' + classe for classe in ['A', 'B', 'C', 'D']]):
-#     for i in range(ncol*nrow):
-#         plt.subplot(nrow, ncol, i+1)
-#         plt.plot(np.arange(chan1_params['length']), chan1[i,:].squeeze())
-#         plt.plot(np.arange(chan1_params['length']), chan2[i, :].squeeze())
-#         plt.title(classe)
-#     plt.show()
+ncol = 3
+nrow = 3
+for chan1, chan2, classe in zip(chans1, chans2, ['class_' + classe for classe in ['A', 'B', 'C', 'D']]):
+    for i in range(ncol*nrow):
+        plt.subplot(nrow, ncol, i+1)
+        plt.plot(np.arange(chan1_params['length']), chan1[i,:].squeeze())
+        plt.plot(np.arange(chan1_params['length']), chan2[i, :].squeeze())
+        plt.title(classe)
+    plt.show()
