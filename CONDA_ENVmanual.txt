@@ -1,0 +1,19 @@
+conda create -n test
+conda activate test
+
+conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch -y  # Cuda 9 or 10 are supported. Change according to your installation
+conda install -c plotly plotly=4.5.0 -y
+conda install pandas -y
+conda install -c conda-forge notebook -y
+conda install seaborn -y
+pip install tensorboardX
+conda install -c conda-forge tensorboard -y
+conda install -c conda-forge tqdm -y
+conda install -c conda-forge scikit-image -y
+pip install datatable  # unavailable on windows, just used to speed up table reading in DataProcesser. If not installed, use DataProcesser(archive, datatable=False)
+pip install tsfresh
+pip install dash==1.8.0
+
+pip install Pillow==6.1 # downgrade if 7.0, incompatible with pytorch 1.1
+
+
