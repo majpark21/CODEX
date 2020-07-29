@@ -1,4 +1,4 @@
-user_lib <- "/home/marc/R/x86_64-pc-linux-gnu-library/3.6"
+user_lib <- "C:/Users/pixel/Documents/R/win-library/3.6"
 if(!dir.exists(user_lib)){
   stop(sprintf("User package library '%s' is not found. In 'dtw_multivariate_distmat.R' modify the variable user_lib to your user library directory.", user_lib))
 }

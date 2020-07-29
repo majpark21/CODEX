@@ -4,7 +4,7 @@
 # Output: a distance matrix with DTW on multivariate channels. Only upper part filled, the rest is set to Inf to be consistent
 # with dtaidistance dtw implementation
 
-user_lib <- "C:/Users/Marc/Documents/R/win-library/3.6"
+user_lib <- "C:/Users/pixel/Documents/R/win-library/3.6"
 if(!dir.exists(user_lib)){
   stop(sprintf("User package library '%s' is not found. In 'dtw_multivariate_distmat.R' modify the variable user_lib to your user library directory.", user_lib))
 }
