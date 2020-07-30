@@ -22,7 +22,7 @@ CODEX relies on the training of a supervised classifier to separate input classe
 
 # What analysis are available in CODEX?
 There are currently 3 main analysis performed in CODEX:
-* The projection of the trajectories CNN features in a low-dimensional space. This visualization provides an overview of all dynamics trends in the dataset and enables the identification of subpopulations at a glance. Use the companion app for ineractive browsing of this projection (Coming soon!).
+* The projection of the trajectories CNN features in a low-dimensional space. This visualization provides an overview of all dynamics trends in the dataset and enables the identification of subpopulations at a glance. Use the companion app for ineractive browsing of this projection.
 * The identification of representative prototype trajectories for each class. Several types of prototypes are extracted, some favorise the trajectories that are extremely specific for each class, others favorise a more complete coverage of all major trajectories trends in the class. Check Notebook 2.
 * The mining of signature motifs for each class. This relies on the use of Class Activation Maps (CAMs), a method that maps to each point in the series a quantitative value that reflects the importance of the points to recognize a given class. These motifs are clustered to obtain a tidy overview of Check Notebooks 3 and 4.
 
@@ -93,4 +93,15 @@ CODEX can handle multivariate input. See the corresponding sections for formatti
 In the proposed CNN architecture, the multivariate input time-series are treated like images with a single color channel (2D plane). Further, we chose to run the 2D convolutions with kernel sizes such that the convolution operation spans over all channels a once. In the CAM-based motif mining, different regions can be highlighted on both channels. However in the current implementation, the motifs are defined as "rectangles", which are defined by a start and an end time point and spans across all channels on this exact segment.
 
 # Interactive app for CNN features projection and inspection
-Coming soon!
+A companion app is also included in this repo to help for the projection and visualization of the CNN features. This is of great help to visualize structures in the dataset that are usually associated with dynamics motifs. The app runs in a webrowser and enables to interactively visualize the trajectories associated to each point as well as to create a CAM towards any classes.
+
+To run the app, in the command line (or the Anaconda prompt, with the codex environment activated) navigate to `source_app/` and enter:
+```
+python app_tsne.py -d path/to/data/file -m path/to/model/file
+```
+Replace `path/to/model/file` and `path/to/data/file` by the paths to the data zip archive that you want to visualize and the model that you want to use to create the features that will be projected. All options for the app can be found by typing:
+```
+python app_tsne.py --help
+```
+
+The projection algortihm is tSNE, you can set the most important parameters of the projection directly in the app. Note that on boot, the tSNE will be run with the minimal number of iterations (250). This will likely result in a bad projection where all points are collapsed in a single cloud. Put this value to a few thousands and press the button "run tSNE". We found a learning rate value of 600 to always be satisfying. The perplexity parameters controls the trade-off between global and local trends that the tSNE projection will capture. A low value puts emphasis on local trends while a high value puts emphasis on global trends. If you see small, disconnected clusters appearing, you should probably increase the perplexity. A rule of thumb is to set the value to the expected number of neighbors around each point. You can find more tips on the [sklearn tSNE help page](https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html).
