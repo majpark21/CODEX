@@ -83,7 +83,7 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
         if softmax:
             scores = F.softmax(scores, dim=1).data.squeeze()
         # Store batch results
-        llab.append(label.data.squeeze().cpu().numpy())
+        llab.append(label.data.cpu().numpy())
         lidt.append(identifier)
         if export_prob:
             lprob.append(scores.data.squeeze().cpu().numpy())
