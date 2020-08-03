@@ -4,7 +4,7 @@
 # Output: a distance matrix with DTW on multivariate channels. Only upper part filled, the rest is set to Inf to be consistent
 # with dtaidistance dtw implementation
 
-user_lib <- "C:/Users/Marc/Documents/R/win-library/3.6"
+user_lib <- "C:/Users/Marc/Documents/R/win-library/3.6"  # REPLACE BY YOUR OWN
 if(!dir.exists(user_lib)){
   stop(sprintf("User package library '%s' is not found. In 'dtw_multivariate_distmat.R' modify the variable user_lib to your user library directory.", user_lib))
 }
@@ -39,17 +39,6 @@ col_id <- args$colid
 exp_csv <- ifelse(args$csv %in% c("T", "TRUE", "True"), TRUE, FALSE)
 exp_rds <- ifelse(args$rds %in% c("T", "TRUE", "True"), TRUE, FALSE)
 
-
-# infile <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/FRST/local_patterns/patt_uncorr_A.csv.gz"
-# outfile <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/FRST/local_patterns/uncorr_dist_norm_A"
-# len <- 400
-# nchannel <-1
-# center <- F
-# normDist <-T
-# col_id <- "NULL"
-# exp_csv <- T
-# exp_rds <- T
-
 dt <- fread(infile)
 if(is.null(col_id) | col_id == "NULL"){
   dt[, pattID := paste0("patt_", as.character(1:nrow(dt)))]
@@ -65,7 +54,6 @@ dt_split <- lapply(dt_split, function(x) matrix(unlist(x), nrow=nchannel, ncol=l
 if(nchannel==1){
   # otherwise get converted to vector in univariate case
   dt_split <- lapply(dt_split, function(x) matrix(x[, colSums(is.na(x)) == 0], nrow=1))
-  #dt_split <- lapply(dt_split, function(x) rbind(x, rep(1, ncol(x))))
 } else {
   dt_split <- lapply(dt_split, function(x) x[, colSums(is.na(x)) == 0]) # clip time points with NAs (speeds up dtw a lot)
 }

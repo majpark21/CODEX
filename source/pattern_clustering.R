@@ -1,4 +1,7 @@
-user_lib <- "C:/Users/Marc/Documents/R/win-library/3.6"
+# To run after DTW distance matrix was built
+# Perform hierarchical clustering and plot representative curves from each cluster
+
+user_lib <- "C:/Users/Marc/Documents/R/win-library/3.6"  # REPLACE BY YOUR OWN
 if(!dir.exists(user_lib)){
   stop(sprintf("User package library '%s' is not found. In 'dtw_multivariate_distmat.R' modify the variable user_lib to your user library directory.", user_lib))
 }
@@ -9,7 +12,6 @@ suppressMessages(library(reshape2, lib.loc = library.path))
 library(ggplot2, lib.loc = library.path)
 library(stringr, lib.loc = library.path)
 suppressMessages(library(dendextend, lib.loc = library.path))
-#library(kohonen, lib.loc = library.path)
 
 # Parsing arguments ----------------------------------------------
 parser <- ArgumentParser(description="A script to cluster time series, extract medoids of clusters and return plots of results.")
@@ -25,7 +27,7 @@ parser$add_argument("--colid", type="character", default=NULL, help="Character. 
 parser$add_argument("--linkage", type="character", default="complete", help="Character. Linkage method, one of: ward.D, ward.D2, single, complete, average, mcquitty, median or centroid. Default to complete.")
 
 args <- parser$parse_args()
-print(args)
+#print(args)
 dist_file <- args$distfile
 patt_file <- args$pattfile
 out_file <- args$outfile
@@ -39,17 +41,6 @@ linkage <- args$linkage
 if(!linkage %in% c("ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median", "centroid")) {
   stop("Linkage must be one of: ward.D, ward.D2, single, complete, average, mcquitty, median or centroid.")
 }
-
-# dist_file <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/ERK_AKT/local_patterns/uncorr_dist_norm_allPooled.csv.gz"
-# patt_file <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/ERK_AKT/local_patterns/patt_uncorr_allPooled.csv.gz"
-# out_file <- "/home/marc/Dropbox/Work/TSclass_GF/Notebooks/output/ERK_AKT/local_patterns/patt_uncorr_allPooled.pdf"
-# len <- 400
-# n_channel <- 2
-# n_clust <- 5
-# col_id <- "pattID"
-# n_medoid <- 3
-# n_patt <- 16
-# linkage <- "complete"
 
 ############## Clustering ----
 dist_mat <- fread(dist_file, header = TRUE)
@@ -70,7 +61,6 @@ tree <- hclust(dist_mat, method = linkage)
 cluster_idx <- stats::cutree(tree, k = n_clust)
 cluster_idx <- data.table(pattID=names(cluster_idx), cluster_idx)
 cluster_idx[, pattID := str_replace(pattID, "^V", "pattID_")]
-
 
 ############## Medoid of clusters ----
 # Get distance matrix in long format
@@ -112,20 +102,6 @@ medoids <- medoid_cluster(dists = dist_mat_long, clusts = cluster_idx, nmed = n_
 medoids[, rank := 1:nrow(.SD), by=cluster_idx]
 setnames(medoids, "pattID1", "pattID")
 
-
-############# SOM ----
-# dt_patt <- fread(patt_file)
-# mat_patt <- as.matrix(dt_patt[,2:ncol(dt_patt)])
-# mygrid <- somgrid(xdim=5, ydim=3, topo="rectangular")
-# som_patt <- som(mat_patt, maxNA.fraction=0.75, grid=mygrid)
-# plot(som_patt, type="changes")
-# plot(som_patt, type="count")
-# plot(som_patt)
-# palet <- rainbow(n_clust)
-# plot(som_patt, type="mapping", bgcol = palet[stats::cutree(tree, k = n_clust)], main = "Clusters")
- 
-
-
 ############## Pattern plotting ----
 dt_patt <- fread(patt_file)
 if(is.null(col_id) | col_id == "NULL"){
@@ -134,19 +110,13 @@ if(is.null(col_id) | col_id == "NULL"){
   setnames(dt_patt, col_id, "pattID")
 }
 time_max <- ceiling(len/n_channel)
-print(len)
-print(n_channel)
-print(time_max)
 
 # Plot sample from each cluster4x4 on different PDF pages
 dt_plot <- melt(dt_patt, id.vars = "pattID")
 dt_plot[, Measure := str_extract(variable, "^[A-Za-z]+")][, Measure := factor(Measure, unique(Measure))]
 dt_plot[, Time := as.numeric(str_extract(variable, "[0-9]+$"))]
-print(dt_plot)
 dt_plot <- dt_plot[Time <= time_max]
-print(dt_plot)
 dt_plot <- merge(dt_plot, cluster_idx, by="pattID")
-#dt_plot[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 
 pdf(out_file)
 # Hclust plot
@@ -159,7 +129,6 @@ dt_medoid[, cluster_idx := factor(cluster_idx, levels = 1:n_clust)]
 p1 <- ggplot(dt_medoid, aes(x=Time, y=value)) +
   geom_line(aes(color=Measure)) +
   facet_grid(cluster_idx~rank) +
-  # geom_label(aes(label = round(med_dist, 3)), x=max(dt_medoid$Time)-5, y=min(dt_medoid$value, na.rm=T) + 0.1) +
   theme_bw() +
   ggtitle(paste0("Top ", as.character(n_medoid), " medoids of the ", as.character(n_clust), " clusters"))
 plot(p1)
