@@ -1,8 +1,19 @@
-# If installation through .yml doesn't work, follow these steps in a fresh conda environment (python 3.7)
+# If installation through .yml doesn't work or if you are a Mac user or if you do not have CUDA 10 follow these steps to create CODEX conda environment (python 3.7)
+# In the command line (or Anaconda prompt):
 conda create -n codex
 conda activate codex
 
-conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch -y  # Cuda 9 or 10 are supported. Change according to your installation
+# Run the line that corresponds to your system (from https://pytorch.org/get-started/previous-versions/#v110)
+# OSX
+# conda install pytorch==1.1.0 torchvision==0.3.0 -c pytorch
+# Linux and Windows
+# CUDA 9
+# conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch -y
+# CUDA 10
+# conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=10.0 -c pytorch
+# CPU Only
+# conda install pytorch-cpu==1.1.0 torchvision-cpu==0.3.0 cpuonly -c pytorch
+
 conda install -c plotly plotly=4.5.0 -y
 conda install pandas -y
 conda install -c conda-forge notebook -y
@@ -11,10 +22,8 @@ pip install tensorboardX
 conda install -c conda-forge tensorboard -y
 conda install -c conda-forge tqdm -y
 conda install -c conda-forge scikit-image -y
-pip install datatable  # unavailable on windows, just used to speed up table reading in DataProcesser. If not installed, use DataProcesser(archive, datatable=False)
+pip install datatable  # unavailable on windows, just used to speed up table reading in DataProcesser. Can proceeed without running this line.
 pip install tsfresh
 pip install dash==1.8.0
 
 pip install Pillow==6.1 # downgrade if 7.0, incompatible with pytorch 1.1
-
-
