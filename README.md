@@ -64,7 +64,7 @@ A couple of R scripts are used to compute the Dynamic Time Warping (DTW) distanc
 
 0. Prerequisites: Have a working [R](https://www.r-project.org/) installation (> 3.5).
 1. Install the following R packages: `argparse, data.table, proxy, dtw, parallelDist, reshape2, ggplot2, stringr, dendextend`
-2. You will need to manually change the first line in both R scripts: `dtw_clustering_distmat.R` and `pattern_clustering.R`. On this line, in both files, change the variable `user_lib` such that it contains the path that points to the directory where your personal R packages are installed. For example in Windows, this path should look like: `'C:/Users/myUserName/Documents/R/win-library/X.X'` where X.X is the version of R; in Linux, this path should look like: `'/home/myUserName/R/x86_64-pc-linux-gnu-library/X.X'`.
+2. You will need to manually change the first line in both R scripts: `dtw_multivar_distmat.R` and `pattern_clustering.R`. On this line, in both files, change the variable `user_lib` such that it contains the path that points to the directory where your personal R packages are installed. For example in Windows, this path should look like: `'C:/Users/myUserName/Documents/R/win-library/X.X'` where X.X is the version of R; in Linux, this path should look like: `'/home/myUserName/R/x86_64-pc-linux-gnu-library/X.X'`.
 
 ## Input format and requirements
 
