@@ -5,14 +5,14 @@ conda activate codex
 
 # Run the line that corresponds to your system (from https://pytorch.org/get-started/previous-versions/#v110)
 # OSX
-# conda install pytorch==1.1.0 torchvision==0.3.0 -c pytorch
+# conda install pytorch==1.1.0 torchvision==0.3.0 -c pytorch -y
 # Linux and Windows
 # CUDA 9
 # conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch -y
 # CUDA 10
-# conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=10.0 -c pytorch
+# conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=10.0 -c pytorch -y
 # CPU Only
-# conda install pytorch-cpu==1.1.0 torchvision-cpu==0.3.0 cpuonly -c pytorch
+# conda install pytorch-cpu==1.1.0 torchvision-cpu==0.3.0 cpuonly -c pytorch -y
 
 conda install -c plotly plotly=4.5.0 -y
 conda install pandas -y

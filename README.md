@@ -33,7 +33,7 @@ This approach is developed at the University of Bern, a related paper will soon 
 
 # Getting started
 
-We strongly encourage to use the notebooks to run all analysis, they contain detailed information about each approach and their parameters. We provide a sample dataset along with a model that was trained on it. We are in the process of cleaning and refactoring all the python files for headless mode.
+We strongly encourage to use the notebooks to run all analysis, they contain detailed information about each approach and their parameters. We provide two sample datasets along with already trained models for both. We are in the process of cleaning and refactoring all the python files for headless mode. Also, bear in mind that training a CNN in reasonable time requires a dedicated GPU. A CPU-only system will be fine for inference (*i.e.* run CODEX's analysis with an already trained model), but training will be orders of magnitude slower. A consumer-grade, mid-range GPU (*e.g.* Nvidia GTX 1050) is sufficient for most applications.
 
 ## Installation
 
@@ -41,7 +41,7 @@ CODEX is mostly written in python and uses the powerful [Pytorch library](https:
 
 ### Python part
 
-0. Prerequisites: Clone this repository and make sure that you have a recent version of [Anaconda](https://www.anaconda.com) installed (Python 2 is not supported).
+0. Prerequisites: Clone this repository and make sure that you have a recent version of [Anaconda](https://www.anaconda.com) installed (Python 3 required, Python 2 not supported).
 1. From there, you have 2 options to install CODEX's Conda environment depending on your system:
     1. For Windows and Linux users. If you have a compatible GPU and CUDA 10 installed, the easiest way is to install the Conda environment with the .yml file provided in this repo. To do so, in command line (or Anaconda prompt on Windows) navigate to the location of the repository and type:
     ```
@@ -50,7 +50,13 @@ CODEX is mostly written in python and uses the powerful [Pytorch library](https:
     ```  
     2. For OSX users or if you do not have a compatible GPU or if you have CUDA 9, create the Conda environment manually. To do so, follow the instructions in `CONDA/CONDA_ENVmanual.txt`.
 
-That's it! You should be all set. Don't forget to activate CODEX's Conda environment every time you want to use CODEX. To be able to use all notebooks, follow the next section.
+That's it! You should be all set. Don't forget to activate CODEX's Conda environment every time you want to use CODEX. To start Jupyter's notebook server in your freshly installed Conda environment, go to Anaconda prompt and enter:
+```
+conda activate codex
+jupyter notebook
+```
+
+Follow the next section if you want to use Notebook 3 for clustering CAM-based motifs.
 
 ### R part (recommended, only used for the motif mining analysis)
 
@@ -98,7 +104,7 @@ In the proposed CNN architecture, the multivariate input time-series are treated
 ## Sample data and models
 Under `sample_data/` you will find 2 sample datasets to help you get started with CODEX. These files can be used as templates to create the input data .zip archive.
 * `Synthetic_Univariate.zip` contains a large, univariate synthetic dataset with 2 classes. Each trajectory was built to contain 4 peak events that can be either a full Gaussian peak or a half-truncated Gaussian peak. Peaks are triggered at random locations but with a minimal distance from each other. The class labeled Full displays predominantly full peaks (2, 3 or 4), while the class labeled Truncated displays predominantly truncated Gaussian peaks (0, 1 or 2 full peaks). The side of the Gaussian peak that is being truncated is chosen at random. Such data can be created with the script `source/synthetic_data.py`. The synthetic variable is named FRST (first, as in "first acquisition channel").
-* `GrowthFactor_ErkAkt_Bivariate.zip` contains a real-world dataset. It represents the activity over time of 2 [signaling pathways](https://en.wikipedia.org/wiki/Signal_transduction) in single-cells: [ERK](https://en.wikipedia.org/wiki/MAPK/ERK_pathway) and [Akt](https://en.wikipedia.org/wiki/PI3K/AKT/mTOR_pathway). Cells were stimulated with one out of 6 [growth factors](https://en.wikipedia.org/wiki/Growth_factor) ([BTC](https://en.wikipedia.org/wiki/Betacellulin), [EGF](https://en.wikipedia.org/wiki/Epidermal_growth_factor), [EPR](https://en.wikipedia.org/wiki/Epiregulin), [HGF](https://en.wikipedia.org/wiki/Hepatocyte_growth_factor), [HRG](https://en.wikipedia.org/wiki/Neuregulin_1), [IGF](https://en.wikipedia.org/wiki/Insulin-like_growth_factor)) or left starved. The treatment applied to a given cell defines the class of the trajectory.
+* `GrowthFactor_ErkAkt_Bivariate.zip` contains a real-world dataset. It represents the activity over time of 2 [signaling pathways](https://en.wikipedia.org/wiki/Signal_transduction) in single-cells: [ERK](https://en.wikipedia.org/wiki/MAPK/ERK_pathway) and [Akt](https://en.wikipedia.org/wiki/PI3K/AKT/mTOR_pathway). Cells were stimulated with one out of 6 [growth factors](https://en.wikipedia.org/wiki/Growth_factor) ([BTC](https://en.wikipedia.org/wiki/Betacellulin), [EGF](https://en.wikipedia.org/wiki/Epidermal_growth_factor), [EPR](https://en.wikipedia.org/wiki/Epiregulin), [HGF](https://en.wikipedia.org/wiki/Hepatocyte_growth_factor), [HRG](https://en.wikipedia.org/wiki/Neuregulin_1), [IGF](https://en.wikipedia.org/wiki/Insulin-like_growth_factor)) or left starved (CTR, control). The treatment applied to a given cell defines the class of the trajectory.
 
 For each dataset, an already trained model is provided under `Notebooks/models/`. If you try to train your own model for the cell signaling dataset, be aware that the resulting model will likely display poor performance. This is because the sample dataset is a subset of a much larger dataset.
 

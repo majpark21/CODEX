@@ -77,7 +77,7 @@ set_to_project = args.set  # one of ['all', 'train', 'validation', 'test']
 # Model Loading
 model_file = args.model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-net = torch.load(model_file)
+net = torch.load(model_file) if torch.cuda.is_available() else torch.load(model_file, map_location='cpu')
 net.eval()
 net.double()
 net = net.to(device)
