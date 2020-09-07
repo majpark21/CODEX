@@ -136,8 +136,6 @@ The buttons on top of the plots let you zoom, pane and reset axes. The rectangle
 
 In case you randomly crop the series to fixed length segments before passing them to the model (to fit the model dimensions), you have 2 options to visualize the cropped segments (*i.e.* the trajectories that were actually passed as input to the model and not the entire uncropped trajectory). In the top-right corner, check `Show borders of network input`, this will indicate with red dashed lines the limits of the segment that was passed to the model. Also in the top-right corner, check `Center x-axis on network input` to zoom on the segment that was passed to the model.
 
-**Known Bug**: Under the CAM overlay menu, the value `Prediction` should create a CAM for the class predicted by the model for the selected trajectory. This returns unreliable results since the last update of Dash. However, selecting a class explicitly works as expected. This will be fixed in a later patch.
-
 
 # References
 

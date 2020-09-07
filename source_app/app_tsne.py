@@ -451,7 +451,15 @@ def update_plot_meas(hoverData, yrange, xshow, xcheck, overlay, target, bin):
             hovered_series = dff.pivot(index='variable', columns='Time', values='value')
             hovered_series = hovered_series.reindex(measurement, axis=0)
             hovered_series = hovered_series.reindex([str(i) for i in sorted(hovered_series.columns.astype('int'))], axis=1)
-            hovered_series = torch.tensor(np.array(hovered_series)).to(device)
+            hovered_series = np.array(hovered_series)
+            # Subtract preprocessing before network (same as in class_dataset)
+            if isinstance(subtract_numbers, (int, float)):
+                subtract_array = np.array([subtract_numbers] * hovered_series.shape[0])
+            elif isinstance(subtract_numbers, list):
+                subtract_array = np.array(subtract_numbers)
+            subtract_array = np.ones_like(hovered_series) * subtract_array[:, None]
+            hovered_series -= subtract_array
+            hovered_series = torch.tensor(hovered_series).to(device)
 
             if 'DF_CROP' in globals():
                 start = int(DF_CROP.loc[DF_CROP['ID']==hovered_cell]['Crop_start'])

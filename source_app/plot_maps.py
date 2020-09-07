@@ -30,7 +30,7 @@ def create_cam(model, device, dataloader=None, id_series=None, array_series=None
         Perform CAM computation: use weights of softmax to weight individual filter response in the filter layer.
         feature_conv: output of last convolution before global average pooling.
         weight_soft_max: array with all softmax weights
-        class_idc: index of the class for which to produce the CAM.
+        class_idx: index of the class for which to produce the CAM.
         """
         # Batch size, number channels (features, number of filters in convolution layer),
         # height (nber measurements), width (length measurements)
@@ -67,13 +67,14 @@ def create_cam(model, device, dataloader=None, id_series=None, array_series=None
     # Create CAM
     logit = model(series)
     h_x = F.softmax(logit, dim=1).data.squeeze()
-    if target_class == 'prediction':
+    if target_class == 'prediction' or target_class == 'placeholder':
         # Return CAM for predicted class
         probs, idx = h_x.sort(dim=0, descending=True)
+        target_class = int(idx[0].item())
         if len(feature_blobs[0].shape) == 3:
-            CAM = returnCAM1D(feature_blobs[0], weight_softmax, [idx[0].item()]).squeeze()
+            CAM = returnCAM1D(feature_blobs[0], weight_softmax, target_class).squeeze()
         elif len(feature_blobs[0].shape) > 3:
-            CAM = returnCAM(feature_blobs[0], weight_softmax, [idx[0].item()]).squeeze()
+            CAM = returnCAM(feature_blobs[0], weight_softmax, target_class).squeeze()
     else:
         if len(feature_blobs[0].shape) == 3:
             CAM = returnCAM1D(feature_blobs[0], weight_softmax, target_class).squeeze()
