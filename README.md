@@ -21,6 +21,8 @@ CODEX is an approach for time-series data exploration that relies on Convolution
 
 CODEX relies on the training of a supervised classifier to separate input classes based on input trajectories. In the context of cell biology, the classes usually correspond to experimental conditions, or other groups of interest, for which one wishes to reveal signatures in dynamic cell states. CODEX revolves around the observation that the data-driven features created by the CNNs are shaped around dynamic motifs and trends in the datasets. With the information contained in these features, we obtain an overview of the dynamics relative to each class by the means of different techniques. The final outputs of CODEX comprise: a low-dimensional embedding to visualize the dataset dynamic trends at a glance, a set of representative prototype trajectories for each class, and a collection of discriminative motifs for each class.
 
+![](CODEX_demo.gif)
+
 # What analysis are available in CODEX?
 There are currently 3 main analysis performed in CODEX:
 * The projection of the trajectories CNN features in a low-dimensional space. This visualization provides an overview of all dynamics trends in the dataset and enables the identification of subpopulations at a glance. Use the companion app for interactive browsing of this projection.
@@ -29,7 +31,12 @@ There are currently 3 main analysis performed in CODEX:
 
 # How to cite us?
 
-This approach is developed at the University of Bern, a related paper will soon be released and this section will be accordingly updated. For any question please contact: marc-antoine.jacques@izb.unibe.ch
+If you use CODEX for your  work, please cite the following preprint:
+```
+Jacques, M. A., Dobrzynski, M., Gagliardi, P. A., Sznitman, R., & Pertz, O. (2020). CODEX, a neural network approach to explore signaling dynamics landscapes. bioRxiv.
+```
+This preprint is available at:
+https://www.biorxiv.org/content/10.1101/2020.08.05.237842v1
 
 # Getting started
 
