@@ -4,6 +4,7 @@ import random
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
 from dash.dependencies import Input, Output, State
 import torch
@@ -222,95 +223,204 @@ def tsne(model, dataloader, device, layer_feature='pool', ncomp=2, ini='pca', pe
 
 # ----------------------------------------------------------------------------------------------------------------------
 # App layout
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+# app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app.layout = html.Div(children=['Visualize features learnt by selected layer with t-SNE.',
-#==== Parameters division ====
-html.Div([
-    # 1st column --------------
-    html.Div([html.Div(['Layer to project:', dcc.Dropdown(id='drop-layer', value='pool', clearable=False,
-                           options=[{'label': i, 'value': i} for i in list(net._modules.keys())])]),
-              html.Div(['Initialization:', dcc.Dropdown(id='drop-init', value='pca', clearable=False,
-                           options=[{'label': i, 'value': i} for i in ['random', 'pca']])]),
-              html.Div(['N dimensions:', dcc.Dropdown(id='drop-ndim', value=2, clearable=False,
-                           options=[{'label':i, 'value':j} for i,j in [('2D', 2), ('3D', 3)]])])],
-    style={'width': '15%', 'display': 'inline-block', 'padding-left': '0.5%', 'vertical-align': 'bottom'}),
+card_tsne = dbc.Card(
+    [
+        dbc.FormGroup(
+            [
+                dbc.Label('Layer to project:'),
+                dcc.Dropdown(
+                    id = 'drop-layer',
+                    options = [{'label': i, 'value': i} for i in list(net._modules.keys())],
+                    clearable = False,
+                    value = 'pool'
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Initialization:'),
+                dcc.Dropdown(
+                    id = 'drop-init',
+                    options=[{'label': i, 'value': i} for i in ['random', 'pca']],
+                    clearable = False,
+                    value = 'pca'
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('N dimensions:'),
+                dcc.Dropdown(
+                    id = 'drop-ndim',
+                    options=[{'label':i, 'value':j} for i,j in [('2D', 2), ('3D', 3)]],
+                    clearable = False,
+                    value = 2
+                ),
+            ]
+        ),
+    ],
+    body = True,
+)
 
-    # 2nd column ---------------
-    html.Div([html.Div(['Learning rate:', dcc.Input(id='input-lr', value=600, type='number',
-                        placeholder='Learning Rate (default = 200)', min=1)]),
-              html.Div(['Perplexity: ', dcc.Input(id='input-perp', value=50, type='number',
-                        placeholder='Perplexity (default = 30)', min=1)]),
-              html.Div(['N iterations: ', dcc.Input(id='input-niter', value=250, type='number',
-                        placeholder='Max number of iteration', min=250)])
-             ],
-    style={'width': '15%', 'display': 'inline-block', 'padding-left': '5%', 'vertical-align': 'bottom'}),
+card_tsne_params = dbc.Card(
+    [
+        dbc.FormGroup(
+            [
+                dbc.Label('Learning rate: '),
+                dcc.Input(
+                    id='input-lr',
+                    value=600,
+                    type='number',
+                    placeholder='Learning Rate (default = 600)',
+                    min=1
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Perplexity: '),
+                dcc.Input(
+                    id='input-perp',
+                    value=50,
+                    type='number',
+                    placeholder='Perplexity (default = 50)',
+                    min=1
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('N iterations: '),
+                dcc.Input(
+                    id='input-niter',
+                    value=250,
+                    type='number',
+                    placeholder='Max number of iteration',
+                    min=250
+                ),
+            ]
+        ),
+    ],
+    body = True
+)
 
-    # 3rd column --------------
-    html.Div([
-          html.Div(['Color overlay for trajectories:', dcc.Dropdown(id='drop-overlay', value='None', clearable=False,
-                     options=[{'label': i, 'value': i} for i in ['None', 'CAM', 'Guided Backprop']])]),
-          html.Div(['Target class overlay:', dcc.Dropdown(id='drop-target', value='prediction', clearable=False, placeholder='Select overlay first',
-                                                                  options=[{'label':'Prediction', 'value': 'prediction'}] +
-                                                                          [{'label': v, 'value': k} for k,v in classes_dict.items()])],
-                   id='div-target'),
-          html.Div(['Binarization overlay:', dcc.Dropdown(id='drop-bin', value='No bin', clearable=False, placeholder='Select overlay first',
-                                                          options=[{'label': i, 'value': i} for i in ['No bin',
-                                                                                                      'Li Threshold',
-                                                                                                      'Mean Threshold']])],
-                   id='div-bin')
-          ],
-    style={'width': '15%', 'display': 'inline-block', 'padding-left': '5%', 'vertical-align': 'bottom'}),
+card_overlay = dbc.Card(
+    [
+        dbc.FormGroup(
+            [
+                dbc.Label('Color overlay for trajectories:'),
+                dcc.Dropdown(
+                    id = 'drop-overlay',
+                    options = [{'label': i, 'value': i} for i in ['None', 'CAM', 'Guided Backprop']],
+                    clearable = False,
+                    value = 'None'
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Target class overlay:'),
+                dcc.Dropdown(
+                    id = 'drop-target',
+                    options=[{'label':'Prediction', 'value': 'prediction'}] +
+                            [{'label': v, 'value': k} for k,v in classes_dict.items()],
+                    clearable = False,
+                    value = 'prediction',
+                    placeholder='Select overlay first'
+                ),
+            ],
+            id='div-target'
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Binarization overlay:'),
+                dcc.Dropdown(
+                    id = 'drop-bin',
+                    options=[{'label': i, 'value': i} for i in ['No bin',
+                                                                'Li Threshold',
+                                                                'Mean Threshold']],
+                    clearable = False,
+                    value = 'No bin',
+                    placeholder='Select overlay first'
+                ),
+            ],
+            id='div-bin'
+        ),
+    ],
+    body = True,
+)
 
-    # 4th column ----------------
-    html.Div([html.Div(id='div-xaxis', style={} if rand_crop else {'display': 'none'}, children=[
-              html.Div([dcc.Checklist(id='check-xrange', value=[], options=[{'label': ' Center x-axis on network input',
-                                                                              'value': True}])],
-                       style={'padding-bottom': '0%', 'display': 'inline-block'}),
-              html.Div([dcc.Checklist(id='check-xshow', value=[True], options=[{'label': ' Show borders of network input',
-                                                                                  'value': True}])],
-                       style={'padding-bottom': '2%', 'display': 'inline-block'})]),
-              html.Div(['Range of y-axis:',
-              dcc.RangeSlider(id='slider-yrange',
-                              min=min_slider,
-                              max=max_slider,
-                              step=(max_slider-min_slider)/100,
-                              value=default_slider,
-                              allowCross=False,
-                              updatemode='drag',
-                              marks={i: {'label': str(round(i, 2))} for i in
-                                     frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
-                              )], style={'padding-bottom':'10%'}),
-              html.Button(id='submit-tsne', n_clicks=0, children='Run t-SNE', style={'background-color': '#008CBA',
-                                                                        'color': 'white'})],
-    style = {'width': '20%', 'display': 'inline-block', 'padding-left': '5%', 'vertical-align': 'bottom'}),
+card_plot = dbc.Card(
+    [
+        dcc.Checklist(
+            id = 'check-xrange',
+            value = [],
+            options=[{'label': ' Center x-axis on network input', 'value': True}]
+        ),
+        dcc.Checklist(
+            id = 'check-xshow',
+            value = [True],
+            options=[{'label': ' Show borders of network input', 'value': True}]
+        ),
+        dcc.RangeSlider(
+            id='slider-yrange',
+            min=min_slider,
+            max=max_slider,
+            step=(max_slider-min_slider)/100,
+            value=default_slider,
+            allowCross=False,
+            updatemode='drag',
+            marks={i: {'label': str(round(i, 2))} for i in
+             frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
+        ),
+        html.Button(
+            id='submit-tsne',
+            n_clicks=0,
+            children='Run t-SNE',
+            style={'background-color': '#008CBA', 'color': 'white'}
+        )
+    ],
+    body = True
+)
 
-],style={'borderBottom': 'thin lightgrey solid',
-        'backgroundColor': 'rgb(250, 250, 250)',
-        'padding': '10px 5px 30px',
-         'display': 'block'
-}),
-#==== Plotting division ====
-#---- tSNE scatterplot #----
-html.Div([
-    dcc.Graph(id='plot-tsne'),
-    ], style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'}),
-#---- Time-series plotting ----
-html.Div([
-     dcc.Graph(id='plot-meas'),
-  ], style={'display': 'inline-block', 'width': '49%'}),
-#---- Table probability and export button ----
-html.Div([
-  html.Button(id='button-export', n_clicks=0, children='Export selection', style={'display': 'inline-block',
-                                                                                  'background-color': '#008CBA',
-                                                                                  'color':'white',
-                                                                                  'float':'left'})],
-    style={'padding-left': '5%'}
-),
-html.Div(id='table-proba', style={'display': 'inline-block',
-                                      'float': 'right'})
-])
+app.layout = dbc.Container(
+    [
+        dbc.Row(
+            dbc.CardDeck([
+                card_tsne,
+                card_tsne_params,
+                card_overlay,
+                card_plot
+            ]),
+            align='center'
+        ),
+        dbc.Row(
+            [
+                dbc.Col(dcc.Graph(id='plot-tsne'), width = 6),
+                dbc.Col(dcc.Graph(id='plot-meas'), width = 6)
+            ]
+        ),
+        dbc.Row(
+            [
+                dbc.Col(html.Button(
+                    id='button-export',
+                    n_clicks=0,
+                    children='Export selection',
+                    style={'display': 'inline-block',
+                     'background-color': '#008CBA',
+                     'color':'white',
+                     'float':'left'}), width = 3),
+                dbc.Col(html.Div(id='table-proba'))
+            ],
+            justify='between'
+        )
+    ],
+    fluid=True,
+)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
