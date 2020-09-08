@@ -366,16 +366,21 @@ card_plot = dbc.Card(
             value = [True],
             options=[{'label': ' Show borders of network input', 'value': True}]
         ),
-        dcc.RangeSlider(
-            id='slider-yrange',
-            min=min_slider,
-            max=max_slider,
-            step=(max_slider-min_slider)/100,
-            value=default_slider,
-            allowCross=False,
-            updatemode='drag',
-            marks={i: {'label': str(round(i, 2))} for i in
-             frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
+        dbc.FormGroup(
+            [
+                dbc.Label('Range of y-axis'),
+                dcc.RangeSlider(
+                    id='slider-yrange',
+                    min=min_slider,
+                    max=max_slider,
+                    step=(max_slider-min_slider)/100,
+                    value=default_slider,
+                    allowCross=False,
+                    updatemode='drag',
+                    marks={i: {'label': str(round(i, 2))} for i in
+                     frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
+                )
+            ]
         ),
         html.Button(
             id='submit-tsne',
@@ -406,17 +411,23 @@ app.layout = dbc.Container(
         ),
         dbc.Row(
             [
-                dbc.Col(html.Button(
-                    id='button-export',
-                    n_clicks=0,
-                    children='Export selection',
-                    style={'display': 'inline-block',
-                     'background-color': '#008CBA',
-                     'color':'white',
-                     'float':'left'}), width = 3),
-                dbc.Col(html.Div(id='table-proba'))
+                dbc.Col(
+                    html.Button(
+                        id='button-export',
+                        n_clicks=0,
+                        children='Export selection',
+                        style={'background-color': '#008CBA', 'color':'white'}
+                    ),
+                    width = 3
+                ),
+                dbc.Col(
+                    html.Div(id='table-proba'),
+                    width = 6
+                )
             ],
-            justify='between'
+            justify = 'between',
+            align = 'center',
+            no_gutters = True
         )
     ],
     fluid=True,
@@ -681,12 +692,16 @@ def update_table_proba(selected_id):
     def generate_table(dataframe, hilight_class, max_rows=10):
         return html.Table(
             # Header
-            [html.Tr([html.Th(col) if col != hilight_class else html.Th(col, style={'background-color': 'red'}) for col in dataframe.columns])] +
+            [html.Tr([html.Th(col, style = {'border-bottom': '1px solid black'})
+            if col != hilight_class
+            else html.Th(col, style={'background-color': 'red', 'border-bottom': '1px solid black'})
+            for col in dataframe.columns])] +
 
             # Body
             [html.Tr([
-                html.Td(dataframe.iloc[i][col]) for col in dataframe.columns
-            ]) for i in range(min(len(dataframe), max_rows))]
+                html.Td(dataframe.iloc[i][col], style = {'border-bottom': '1px solid black'}) for col in dataframe.columns
+            ]) for i in range(min(len(dataframe), max_rows))],
+            style = {'border-collapse': 'collapse', 'width': '100%'}
         )
     if selected_id is not None:
         cell_id = selected_id['points'][0]['text']
