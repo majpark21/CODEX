@@ -386,43 +386,54 @@ card_plot = dbc.Card(
     body = True
 )
 
+button_collapse = dbc.Button(
+                    'Open menu parameters \u25BE',
+                    id='collapse-button',
+                    color='primary'
+                  )
+
 button_submit = dbc.Button(
+                    '\u21BB Run t-SNE',
                     id='submit-tsne',
                     n_clicks=0,
-                    children='Run t-SNE',
                     color='primary'
                 )
 
 button_export = dbc.Button(
+                    '\u2913 Export selection',
                     id='button-export',
                     n_clicks=0,
-                    children='Export selection',
                     color='primary'
                 )
 
 app.layout = dbc.Container(
     [
-        dbc.Row(
-            [
-                dbc.Col(
-                    dbc.CardDeck(
-                        [
-                            card_tsne,
-                            card_tsne_params,
-                            card_overlay,
-                            card_plot
-                        ]
+        button_collapse,
+        dbc.Collapse(
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.CardDeck(
+                            [
+                                card_tsne,
+                                card_tsne_params,
+                                card_overlay,
+                                card_plot
+                            ]
+                        ),
+                        width = 9
                     ),
-                    width = 9
-                ),
-                dbc.Col(
-                    button_submit,
-                    width = 3
-                )
-            ],
-            align='end',
-            justify='around',
-            style={'background-color': '#f8f9fa', 'padding': '15px 5px 20px 20px', 'borderBottom': 'thin lightgrey solid'}
+                    dbc.Col(
+                        button_submit,
+                        width = 3
+                    )
+                ],
+                align='end',
+                justify='around',
+                style={'background-color': '#f8f9fa', 'padding': '15px 5px 20px 20px', 'borderBottom': 'thin lightgrey solid'}
+            ),
+        id ='collapse',
+        is_open=True
         ),
         dbc.Row(
             [
@@ -448,6 +459,19 @@ app.layout = dbc.Container(
     ],
     fluid=True,
 )
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Collapse menu with parameters
+@app.callback(
+    Output("collapse", "is_open"),
+    [Input("collapse-button", "n_clicks")],
+    [State("collapse", "is_open")],
+)
+def toggle_collapse(n, is_open):
+    if n:
+        return not is_open
+    return is_open
 
 
 # ----------------------------------------------------------------------------------------------------------------------
