@@ -381,27 +381,48 @@ card_plot = dbc.Card(
                      frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
                 )
             ]
-        ),
-        html.Button(
-            id='submit-tsne',
-            n_clicks=0,
-            children='Run t-SNE',
-            style={'background-color': '#008CBA', 'color': 'white'}
         )
     ],
     body = True
 )
 
+button_submit = dbc.Button(
+                    id='submit-tsne',
+                    n_clicks=0,
+                    children='Run t-SNE',
+                    color='primary'
+                )
+
+button_export = dbc.Button(
+                    id='button-export',
+                    n_clicks=0,
+                    children='Export selection',
+                    color='primary'
+                )
+
 app.layout = dbc.Container(
     [
         dbc.Row(
-            dbc.CardDeck([
-                card_tsne,
-                card_tsne_params,
-                card_overlay,
-                card_plot
-            ]),
-            align='center'
+            [
+                dbc.Col(
+                    dbc.CardDeck(
+                        [
+                            card_tsne,
+                            card_tsne_params,
+                            card_overlay,
+                            card_plot
+                        ]
+                    ),
+                    width = 9
+                ),
+                dbc.Col(
+                    button_submit,
+                    width = 3
+                )
+            ],
+            align='end',
+            justify='around',
+            style={'background-color': '#f8f9fa', 'padding': '15px 5px 20px 20px', 'borderBottom': 'thin lightgrey solid'}
         ),
         dbc.Row(
             [
@@ -412,12 +433,7 @@ app.layout = dbc.Container(
         dbc.Row(
             [
                 dbc.Col(
-                    html.Button(
-                        id='button-export',
-                        n_clicks=0,
-                        children='Export selection',
-                        style={'background-color': '#008CBA', 'color':'white'}
-                    ),
+                    button_export,
                     width = 3
                 ),
                 dbc.Col(
