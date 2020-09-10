@@ -25,6 +25,7 @@ from skimage.filters import threshold_li, threshold_mean
 from tkinter import filedialog, Tk
 from functools import reduce
 import argparse
+import json
 
 #Todo: ID upload, selection hover/click mode, correct centering and dashed lines when time is not increasing 1 by 1
 def parseArguments_overlay():
@@ -270,8 +271,8 @@ card_tsne_params = dbc.Card(
     [
         dbc.FormGroup(
             [
-                dbc.Label('Learning rate: '),
-                dcc.Input(
+                dbc.Label('Learning rate:'),
+                dbc.Input(
                     id='input-lr',
                     value=600,
                     type='number',
@@ -282,8 +283,8 @@ card_tsne_params = dbc.Card(
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Perplexity: '),
-                dcc.Input(
+                dbc.Label('Perplexity:'),
+                dbc.Input(
                     id='input-perp',
                     value=50,
                     type='number',
@@ -294,8 +295,8 @@ card_tsne_params = dbc.Card(
         ),
         dbc.FormGroup(
             [
-                dbc.Label('N iterations: '),
-                dcc.Input(
+                dbc.Label('N iterations:'),
+                dbc.Input(
                     id='input-niter',
                     value=250,
                     type='number',
@@ -381,6 +382,20 @@ card_plot = dbc.Card(
                      frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
                 )
             ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Point alpha'),
+                dcc.Slider(
+                    id='slider-alpha',
+                    min=0,
+                    max=1,
+                    step=0.01,
+                    value=1,
+                    updatemode='mouseup',
+                    marks={i: {'label': i} for i in [0, 0.25, 0.5, 0.75, 1]}
+                )
+            ]
         )
     ],
     body = True
@@ -408,6 +423,9 @@ button_export = dbc.Button(
 
 app.layout = dbc.Container(
     [
+        # Hidden division used to store the tSNE coordinates, this way can
+        # update the plot appearance without recomputing the tSNE
+        html.Div(id='hidden-tsne', style={'display': 'none'}),
         button_collapse,
         dbc.Collapse(
             dbc.Row(
@@ -439,7 +457,8 @@ app.layout = dbc.Container(
             [
                 dbc.Col(dcc.Graph(id='plot-tsne'), width = 6),
                 dbc.Col(dcc.Graph(id='plot-meas'), width = 6)
-            ]
+            ],
+            no_gutters=True
         ),
         dbc.Row(
             [
@@ -455,7 +474,7 @@ app.layout = dbc.Container(
             justify = 'between',
             align = 'center',
             no_gutters = True
-        )
+        ),
     ],
     fluid=True,
 )
@@ -514,9 +533,9 @@ def show_placeholder(overlay_value, curr_target, curr_bin):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Plot t-SNE embedding
+# Compute t-SNE coordinates and store them in a hidden division for sharing between callbacks
 @app.callback(
-    Output('plot-tsne', 'figure'),
+    Output('hidden-tsne', 'children'),
     [Input('submit-tsne', 'n_clicks')],
     [State('drop-layer', 'value'),
      State('drop-init', 'value'),
@@ -525,11 +544,31 @@ def show_placeholder(overlay_value, curr_target, curr_bin):
      State('input-perp', 'value'),
      State('input-niter', 'value')]
 )
-def update_plot_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
+def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
     globals()
     tsne_coord, labels, ids = tsne(model=net, dataloader=mydataloader, device=device, layer_feature=layer,
                                    ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter)
+    # Need to convert numpy arrays to list for JSON conversion
+    toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
+    return json.dumps(toStore)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Plot t-SNE embedding
+@app.callback(
+    Output('plot-tsne', 'figure'),
+    [Input('hidden-tsne', 'children'),
+     Input('slider-alpha', 'value')]
+)
+def plot_tsne(dict_tsne, alpha):
+    globals()
+    dict_load = json.loads(dict_tsne)
+    tsne_coord, labels, ids = dict_load['tsne_coord'], dict_load['labels'], dict_load['ids']
+    # Revert the lists in the JSON back to numpy arrays
+    tsne_coord = np.array(tsne_coord)
+    labels = np.array(labels)
+    ids = np.array(ids)
     # Create a different trace for each class
+    ndim = tsne_coord.shape[1]
     traces = []
     for classe in classes:
         idx = np.where(labels==classe)
@@ -537,6 +576,7 @@ def update_plot_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
             traces.append(go.Scattergl(x = tsne_coord[idx, 0].squeeze(),
                                      y = tsne_coord[idx, 1].squeeze(),
                                      mode='markers',
+                                     opacity=alpha,
                                      name=classe,
                                      text=ids[idx]
                                    ))
@@ -545,6 +585,7 @@ def update_plot_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
                                        y = tsne_coord[idx, 1].squeeze(),
                                        z = tsne_coord[idx, 2].squeeze(),
                                        mode='markers',
+                                       opacity=alpha,
                                        marker=dict(size=3),
                                        name=classe,
                                        text=ids[idx]
@@ -570,7 +611,6 @@ def update_plot_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
                 hovermode='closest'
             )
         }
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Plot measurement of hovered trajectory
@@ -755,10 +795,11 @@ def update_table_proba(selected_id):
 @app.callback(
     Output('button-export', 'style'),
     [Input('button-export', 'n_clicks')],
-    [State('plot-tsne', 'selectedData'), State('button-export', 'style')]
+    [State('plot-tsne', 'selectedData'),
+     State('button-export', 'style')]
 )
 def export_selection(nclicks, selected_points, curr_style):
-    # Dummy return
+    # Dummy return because callbacks need an output
     button_style = curr_style
     if nclicks > 0:
         selected_points = selected_points['points']
