@@ -574,12 +574,12 @@ def plot_tsne(dict_tsne, alpha):
         idx = np.where(labels==classe)
         if ndim==2:
             traces.append(go.Scattergl(x = tsne_coord[idx, 0].squeeze(),
-                                     y = tsne_coord[idx, 1].squeeze(),
-                                     mode='markers',
-                                     opacity=alpha,
-                                     name=classe,
-                                     text=ids[idx]
-                                   ))
+                                       y = tsne_coord[idx, 1].squeeze(),
+                                       mode='markers',
+                                       opacity=alpha,
+                                       name=classe,
+                                       text=ids[idx]
+                                      ))
         elif ndim==3:
             traces.append(go.Scatter3d(x = tsne_coord[idx, 0].squeeze(),
                                        y = tsne_coord[idx, 1].squeeze(),
