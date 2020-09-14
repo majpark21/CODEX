@@ -24,6 +24,6 @@ conda install -c conda-forge tqdm -y
 conda install -c conda-forge scikit-image -y
 pip install datatable  # unavailable on windows, just used to speed up table reading in DataProcesser. Can proceeed without running this line.
 pip install tsfresh
-pip install dash==1.8.0
+pip install dash-bootstrap-components
 
 pip install Pillow==6.1 # downgrade if 7.0, incompatible with pytorch 1.1
