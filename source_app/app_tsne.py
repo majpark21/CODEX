@@ -26,6 +26,7 @@ from tkinter import filedialog, Tk
 from functools import reduce
 import argparse
 import json
+import plotly.express as px
 
 #Todo: ID upload, selection hover/click mode, correct centering and dashed lines when time is not increasing 1 by 1
 def parseArguments_overlay():
@@ -221,6 +222,35 @@ def tsne(model, dataloader, device, layer_feature='pool', ncomp=2, ini='pca', pe
 
     return feature_embedded, label, identifier
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Color palettes
+def hex_to_rgb(value, add_alpha=-1):
+    assert (add_alpha <= 1 and add_alpha >= 0) or (add_alpha == -1)
+    value = value.lstrip('#')
+    lv = len(value)
+    out = tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+    if add_alpha != -1:
+        out += (add_alpha,)
+    return out
+
+def recycle_palette(palette, size):
+    """Cycle through a palette (list) until it reaches desired length (int)."""
+    length = len(palette)
+    nrepeat = (size // length) + 1
+    out = palette * nrepeat
+    return out[0:size]
+
+
+global PALETTES
+PALETTES = {
+    'D3': list(map(hex_to_rgb, px.colors.qualitative.D3)),
+    'Plotly': list(map(hex_to_rgb, px.colors.qualitative.Plotly)),
+    'G10': list(map(hex_to_rgb, px.colors.qualitative.G10)),
+    'T10': list(map(hex_to_rgb, px.colors.qualitative.T10)),
+    'Alphabet': list(map(hex_to_rgb, px.colors.qualitative.Alphabet)),
+    'Dark24': list(map(hex_to_rgb, px.colors.qualitative.Dark24))
+}
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # App layout
@@ -355,6 +385,56 @@ card_overlay = dbc.Card(
     body = True,
 )
 
+card_scatterplot = dbc.Card(
+    [
+        dbc.FormGroup(
+            [
+                dbc.Label('Color palette:'),
+                dcc.Dropdown(
+                    id = 'drop-palette',
+                    options=[{'label': i, 'value': i} for i in PALETTES.keys()],
+                    clearable = False,
+                    value = 'D3',
+                ),
+            ],
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Point alpha'),
+                dcc.Slider(
+                    id='slider-alpha',
+                    min=0,
+                    max=1,
+                    step=0.01,
+                    value=1,
+                    updatemode='mouseup',
+                    marks={i: {'label': i} for i in [0, 0.25, 0.5, 0.75, 1]}
+                )
+            ]
+        ),
+        dcc.Checklist(
+            id='check-density',
+            value=[],
+            options=[{'label': ' Plot density', 'value': True}]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Number bins density'),
+                dcc.Slider(
+                    id='slider-density',
+                    min=1,
+                    max=20,
+                    step=1,
+                    value=5,
+                    updatemode='mouseup',
+                    marks={i: {'label': i} for i in range(1, 21, 5)}
+                )
+            ]
+        )
+    ],
+    body = True
+)
+
 card_plot = dbc.Card(
     [
         dcc.Checklist(
@@ -380,20 +460,6 @@ card_plot = dbc.Card(
                     updatemode='drag',
                     marks={i: {'label': str(round(i, 2))} for i in
                      frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
-                )
-            ]
-        ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Point alpha'),
-                dcc.Slider(
-                    id='slider-alpha',
-                    min=0,
-                    max=1,
-                    step=0.01,
-                    value=1,
-                    updatemode='mouseup',
-                    marks={i: {'label': i} for i in [0, 0.25, 0.5, 0.75, 1]}
                 )
             ]
         )
@@ -436,14 +502,15 @@ app.layout = dbc.Container(
                                 card_tsne,
                                 card_tsne_params,
                                 card_overlay,
+                                card_scatterplot,
                                 card_plot
                             ]
                         ),
-                        width = 9
+                        width = 10
                     ),
                     dbc.Col(
                         button_submit,
-                        width = 3
+                        width = 2
                     )
                 ],
                 align='end',
@@ -557,9 +624,12 @@ def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
 @app.callback(
     Output('plot-tsne', 'figure'),
     [Input('hidden-tsne', 'children'),
-     Input('slider-alpha', 'value')]
+     Input('slider-alpha', 'value'),
+     Input('check-density', 'value'),
+     Input('slider-density', 'value'),
+     Input('drop-palette', 'value')]
 )
-def plot_tsne(dict_tsne, alpha):
+def plot_tsne(dict_tsne, alpha, density, nbins, palette):
     globals()
     dict_load = json.loads(dict_tsne)
     tsne_coord, labels, ids = dict_load['tsne_coord'], dict_load['labels'], dict_load['ids']
@@ -570,23 +640,39 @@ def plot_tsne(dict_tsne, alpha):
     # Create a different trace for each class
     ndim = tsne_coord.shape[1]
     traces = []
-    for classe in classes:
+    marker_palette = recycle_palette(PALETTES[palette], len(classes))
+    for classe, marker_color in zip(classes, marker_palette):
+        marker_color_str = 'rgb({0}, {1}, {2})'.format(*marker_color)
+        density_color_hi_str = 'rgba({0}, {1}, {2}, 0.5)'.format(*marker_color)
+        density_color_lo_str = 'rgba({0}, {1}, {2}, 0)'.format(*marker_color)
         idx = np.where(labels==classe)
         if ndim==2:
             traces.append(go.Scattergl(x = tsne_coord[idx, 0].squeeze(),
                                        y = tsne_coord[idx, 1].squeeze(),
                                        mode='markers',
                                        opacity=alpha,
+                                       marker=dict(color=marker_color_str),
                                        name=classe,
                                        text=ids[idx]
                                       ))
+            if density:
+                traces.append(go.Histogram2dContour(
+                    x = tsne_coord[idx, 0].squeeze(),
+                    y = tsne_coord[idx, 1].squeeze(),
+                    name = classe,
+                    ncontours = nbins,
+                    hoverinfo = 'skip',
+                    colorscale = [[0, density_color_lo_str], [1, density_color_hi_str]],
+                    showscale = False
+                ))
         elif ndim==3:
             traces.append(go.Scatter3d(x = tsne_coord[idx, 0].squeeze(),
                                        y = tsne_coord[idx, 1].squeeze(),
                                        z = tsne_coord[idx, 2].squeeze(),
                                        mode='markers',
                                        opacity=alpha,
-                                       marker=dict(size=3),
+                                       marker=dict(size=3,
+                                                   color = marker_color_str),
                                        name=classe,
                                        text=ids[idx]
                                     ))
