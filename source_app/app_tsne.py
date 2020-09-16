@@ -385,23 +385,8 @@ card_overlay = dbc.Card(
     body = True,
 )
 
-card_plot = dbc.Card(
+card_scatterplot = dbc.Card(
     [
-        dcc.Checklist(
-            id = 'check-xrange',
-            value = [],
-            options=[{'label': ' Center x-axis on network input', 'value': True}]
-        ),
-        dcc.Checklist(
-            id = 'check-xshow',
-            value = [True],
-            options=[{'label': ' Show borders of network input', 'value': True}]
-        ),
-        dcc.Checklist(
-            id='check-density',
-            value=[],
-            options=[{'label': ' Plot density', 'value': True}]
-        ),
         dbc.FormGroup(
             [
                 dbc.Label('Color palette:'),
@@ -412,22 +397,6 @@ card_plot = dbc.Card(
                     value = 'D3',
                 ),
             ],
-        ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Range of y-axis'),
-                dcc.RangeSlider(
-                    id='slider-yrange',
-                    min=min_slider,
-                    max=max_slider,
-                    step=(max_slider-min_slider)/100,
-                    value=default_slider,
-                    allowCross=False,
-                    updatemode='drag',
-                    marks={i: {'label': str(round(i, 2))} for i in
-                     frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
-                )
-            ]
         ),
         dbc.FormGroup(
             [
@@ -443,6 +412,11 @@ card_plot = dbc.Card(
                 )
             ]
         ),
+        dcc.Checklist(
+            id='check-density',
+            value=[],
+            options=[{'label': ' Plot density', 'value': True}]
+        ),
         dbc.FormGroup(
             [
                 dbc.Label('Number bins density'),
@@ -454,6 +428,38 @@ card_plot = dbc.Card(
                     value=5,
                     updatemode='mouseup',
                     marks={i: {'label': i} for i in range(1, 21, 5)}
+                )
+            ]
+        )
+    ],
+    body = True
+)
+
+card_plot = dbc.Card(
+    [
+        dcc.Checklist(
+            id = 'check-xrange',
+            value = [],
+            options=[{'label': ' Center x-axis on network input', 'value': True}]
+        ),
+        dcc.Checklist(
+            id = 'check-xshow',
+            value = [True],
+            options=[{'label': ' Show borders of network input', 'value': True}]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Range of y-axis'),
+                dcc.RangeSlider(
+                    id='slider-yrange',
+                    min=min_slider,
+                    max=max_slider,
+                    step=(max_slider-min_slider)/100,
+                    value=default_slider,
+                    allowCross=False,
+                    updatemode='drag',
+                    marks={i: {'label': str(round(i, 2))} for i in
+                     frange(min_slider, max_slider - 1e-9 + (max_slider - min_slider) / 5, (max_slider - min_slider) / 5)}
                 )
             ]
         )
@@ -496,14 +502,15 @@ app.layout = dbc.Container(
                                 card_tsne,
                                 card_tsne_params,
                                 card_overlay,
+                                card_scatterplot,
                                 card_plot
                             ]
                         ),
-                        width = 9
+                        width = 10
                     ),
                     dbc.Col(
                         button_submit,
-                        width = 3
+                        width = 2
                     )
                 ],
                 align='end',
