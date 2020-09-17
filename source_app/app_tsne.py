@@ -487,6 +487,22 @@ button_export = dbc.Button(
                     color='primary'
                 )
 
+dropdown_export = dcc.Dropdown(
+    id = 'drop-export',
+    options = [
+        {'label': 'Class', 'value': 'Class'},
+        {'label': 'tSNE Coordinates', 'value': 'Coord'},
+        {'label': 'CNN Output', 'value': 'Probability'},
+        {'label': 'CNN Features', 'value': 'Feature'},
+        {'label': 'Crop Info', 'value': 'Crop'},
+        {'label': 'Input Data', 'value': 'Input'}
+    ],
+    multi = True,
+    searchable = False,
+    value = ['Class', 'Coord', 'Probability', 'Feature', 'Crop'],
+    placeholder = 'Select elements to export'
+)
+
 app.layout = dbc.Container(
     [
         # Hidden division used to store the tSNE coordinates, this way can
@@ -530,7 +546,12 @@ app.layout = dbc.Container(
         dbc.Row(
             [
                 dbc.Col(
-                    button_export,
+                    dbc.Card(
+                        [
+                            dropdown_export,
+                            button_export
+                        ]
+                    ),
                     width = 3
                 ),
                 dbc.Col(
@@ -882,9 +903,10 @@ def update_table_proba(selected_id):
     Output('button-export', 'style'),
     [Input('button-export', 'n_clicks')],
     [State('plot-tsne', 'selectedData'),
-     State('button-export', 'style')]
+     State('button-export', 'style'),
+     State('drop-export', 'value')]
 )
-def export_selection(nclicks, selected_points, curr_style):
+def export_selection(nclicks, selected_points, curr_style, export_options):
     # Dummy return because callbacks need an output
     button_style = curr_style
     if nclicks > 0:
@@ -922,9 +944,24 @@ def export_selection(nclicks, selected_points, curr_style):
 
         frame_crop = deepcopy(DF_CROP[DF_CROP['ID'].isin(selected_ids)])
         # ----------------------------------------------
-
-        df_out = [frame_class, frame_coord, frame_probs, frame_feats, frame_crop, dff_wide]
-        df_out = reduce(lambda left,right: pd.merge(left, right, on='ID'), df_out)
+        # Merge the requested frames
+        df_out = [frame_class['ID']]
+        if 'Class' in export_options:
+            df_out.append(frame_class)
+        if 'Coord' in export_options:
+            df_out.append(frame_coord)
+        if 'Probability' in export_options:
+            df_out.append(frame_probs)
+        if 'Feature' in export_options:
+            df_out.append(frame_feats)
+        if 'Crop' in export_options:
+            df_out.append(frame_crop)
+        if 'Input' in export_options:
+            df_out.append(dff_wide)
+        if len(df_out) == 1:  # if only the ID column
+            df_out = df_out[0].to_frame()
+        else:
+            df_out = reduce(lambda left,right: pd.merge(left, right, on='ID'), df_out)
         df_out.set_index('ID', inplace=True)
 
         # Open contextual menu to save
