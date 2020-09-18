@@ -196,7 +196,7 @@ def tsne(model, dataloader, device, layer_feature='pool', ncomp=2, ini='pca', pe
 
     # Df with classification output, used to build html table when hovering points and export of selection
     global DF_PROBS
-    DF_PROBS = deepcopy(df_out[prob_cols])  # copy avoids pandas warning about modifying copy
+    DF_PROBS = deepcopy(df_out[['Class'] + prob_cols])  # copy avoids pandas warning about modifying copy
     DF_PROBS.index = df_out['ID']
     old_labels = {col: re.search('\d+$', col) for col in DF_PROBS.columns.values}
     new_labels = {col: re.sub('\d+$', classes_col[int(old_labels[col].group())], col)
@@ -437,6 +437,34 @@ card_scatterplot = dbc.Card(
 
 card_plot = dbc.Card(
     [
+        dbc.FormGroup(
+            [
+                dbc.Label('Highlight prototypes:'),
+                dcc.Dropdown(
+                    id = 'drop-proto',
+                    options = [
+                        {'label': 'None', 'value': 'None'},
+                        {'label': 'Top', 'value': 'Top'}
+                    ],
+                    clearable = False,
+                    value = 'None',
+                ),
+            ],
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Number prototypes:'),
+                dcc.Slider(
+                    id='slider-proto',
+                    min=1,
+                    max=20,
+                    step=1,
+                    value=5,
+                    updatemode='mouseup',
+                    marks={i:{'label': i} for i in range(1, 21, 5)}
+                )
+            ]
+        ),
         dcc.Checklist(
             id = 'check-xrange',
             value = [],
@@ -467,8 +495,9 @@ card_plot = dbc.Card(
     body = True
 )
 
+
 button_collapse = dbc.Button(
-                    'Open menu parameters \u25BE',
+                    'Fold parameters menu \u25BE',
                     id='collapse-button',
                     color='primary'
                   )
@@ -648,9 +677,11 @@ def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
      Input('slider-alpha', 'value'),
      Input('check-density', 'value'),
      Input('slider-density', 'value'),
-     Input('drop-palette', 'value')]
+     Input('drop-palette', 'value'),
+     Input('drop-proto', 'value'),
+     Input('slider-proto', 'value')]
 )
-def plot_tsne(dict_tsne, alpha, density, nbins, palette):
+def plot_tsne(dict_tsne, alpha, density, nbins, palette, prototypes, nprototypes):
     globals()
     dict_load = json.loads(dict_tsne)
     tsne_coord, labels, ids = dict_load['tsne_coord'], dict_load['labels'], dict_load['ids']
@@ -667,6 +698,7 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette):
         density_color_hi_str = 'rgba({0}, {1}, {2}, 0.5)'.format(*marker_color)
         density_color_lo_str = 'rgba({0}, {1}, {2}, 0)'.format(*marker_color)
         idx = np.where(labels==classe)
+
         if ndim==2:
             traces.append(go.Scattergl(x = tsne_coord[idx, 0].squeeze(),
                                        y = tsne_coord[idx, 1].squeeze(),
@@ -686,6 +718,26 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette):
                     colorscale = [[0, density_color_lo_str], [1, density_color_hi_str]],
                     showscale = False
                 ))
+            if prototypes == 'Top':
+                df_class = DF_PROBS.loc[DF_PROBS['Class']==classe]
+                nproto = min(nprototypes, len(df_class.index))
+                ids_proto = df_class.sort_values(by=classe).tail(nproto).index.to_numpy()
+                idx_proto = [np.where(ids==i) for i in ids_proto]
+                idx_proto = np.concatenate(idx_proto, axis=1)[0]
+                idx_proto = (np.array(idx_proto), )
+                traces.append(go.Scattergl(x = tsne_coord[idx_proto, 0].squeeze(),
+                                           y = tsne_coord[idx_proto, 1].squeeze(),
+                                           mode='markers',
+                                           legendgroup='prototypes',
+                                           # opacity=alpha,
+                                           marker=dict(color=marker_color_str,
+                                                       symbol='diamond',
+                                                       size=8),
+                                           name=classe,
+                                           text=ids[idx_proto]
+                                          ))
+
+
         elif ndim==3:
             traces.append(go.Scatter3d(x = tsne_coord[idx, 0].squeeze(),
                                        y = tsne_coord[idx, 1].squeeze(),
@@ -697,6 +749,25 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette):
                                        name=classe,
                                        text=ids[idx]
                                     ))
+            if prototypes == 'Top':
+                df_class = DF_PROBS.loc[DF_PROBS['Class']==classe]
+                nproto = min(nprototypes, len(df_class.index))
+                ids_proto = df_class.sort_values(by=classe).tail(nproto).index.to_numpy()
+                idx_proto = [np.where(ids==i) for i in ids_proto]
+                idx_proto = np.concatenate(idx_proto, axis=1)[0]
+                idx_proto = (np.array(idx_proto), )
+                traces.append(go.Scatter3d(x = tsne_coord[idx_proto, 0].squeeze(),
+                                           y = tsne_coord[idx_proto, 1].squeeze(),
+                                           z = tsne_coord[idx_proto, 2].squeeze(),
+                                           mode='markers',
+                                           legendgroup='prototypes',
+                                           # opacity=alpha,
+                                           marker=dict(color=marker_color_str,
+                                                       symbol='diamond',
+                                                       size=8),
+                                           name=classe,
+                                           text=ids[idx_proto]
+                                          ))
     if ndim==2:
         return {
             'data': traces,
@@ -893,8 +964,10 @@ def update_table_proba(selected_id):
     if selected_id is not None:
         cell_id = selected_id['points'][0]['text']
         cell_class = classes_dict[df.loc[df['ID'] == cell_id]['Class'].unique()[0]]
-        filtered_df = round(DF_PROBS.loc[[cell_id]], 4)
-        return generate_table(filtered_df, cell_class)
+        cell_probs = DF_PROBS.loc[[cell_id]]
+        cell_probs.drop('Class', axis=1, inplace=True)
+        cell_probs = round(cell_probs, 4)
+        return generate_table(cell_probs, cell_class)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -932,6 +1005,7 @@ def export_selection(nclicks, selected_points, curr_style, export_options):
         frame_coord.rename(columns={'index': 'ID'}, inplace=True)
 
         frame_probs = deepcopy(DF_PROBS.loc[selected_ids])
+        frame_probs.drop('Class', axis=1, inplace=True)
         frame_probs = round(frame_probs, 4)
         frame_probs.columns = ['Prob_' + col for col in frame_probs.columns]
         frame_probs.reset_index(inplace=True)
