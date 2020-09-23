@@ -648,6 +648,17 @@ def show_placeholder(overlay_value, curr_target, curr_bin):
         out = (new_target, new_bin)
         return out
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Change alpha of points upon checking prototypes for better highlight
+@app.callback(
+    Output('slider-alpha', 'value'),
+    [Input('drop-proto', 'value')],
+)
+def change_alpha(prototypes):
+    if prototypes == 'None':
+        return 1
+    else:
+        return 0.25
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Compute t-SNE coordinates and store them in a hidden division for sharing between callbacks
@@ -700,24 +711,6 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette, prototypes, nprototypes
         idx = np.where(labels==classe)
 
         if ndim==2:
-            traces.append(go.Scattergl(x = tsne_coord[idx, 0].squeeze(),
-                                       y = tsne_coord[idx, 1].squeeze(),
-                                       mode='markers',
-                                       opacity=alpha,
-                                       marker=dict(color=marker_color_str),
-                                       name=classe,
-                                       text=ids[idx]
-                                      ))
-            if density:
-                traces.append(go.Histogram2dContour(
-                    x = tsne_coord[idx, 0].squeeze(),
-                    y = tsne_coord[idx, 1].squeeze(),
-                    name = classe,
-                    ncontours = nbins,
-                    hoverinfo = 'skip',
-                    colorscale = [[0, density_color_lo_str], [1, density_color_hi_str]],
-                    showscale = False
-                ))
             if prototypes == 'Top':
                 df_class = DF_PROBS.loc[DF_PROBS['Class']==classe]
                 nproto = min(nprototypes, len(df_class.index))
@@ -736,19 +729,28 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette, prototypes, nprototypes
                                            name=classe,
                                            text=ids[idx_proto]
                                           ))
+            traces.append(go.Scattergl(x = tsne_coord[idx, 0].squeeze(),
+                                       y = tsne_coord[idx, 1].squeeze(),
+                                       mode='markers',
+                                       opacity=alpha,
+                                       marker=dict(color=marker_color_str),
+                                       name=classe,
+                                       text=ids[idx]
+                                      ))
+            if density:
+                traces.append(go.Histogram2dContour(
+                    x = tsne_coord[idx, 0].squeeze(),
+                    y = tsne_coord[idx, 1].squeeze(),
+                    name = classe,
+                    ncontours = nbins,
+                    hoverinfo = 'skip',
+                    colorscale = [[0, density_color_lo_str], [1, density_color_hi_str]],
+                    showscale = False
+                ))
+
 
 
         elif ndim==3:
-            traces.append(go.Scatter3d(x = tsne_coord[idx, 0].squeeze(),
-                                       y = tsne_coord[idx, 1].squeeze(),
-                                       z = tsne_coord[idx, 2].squeeze(),
-                                       mode='markers',
-                                       opacity=alpha,
-                                       marker=dict(size=3,
-                                                   color = marker_color_str),
-                                       name=classe,
-                                       text=ids[idx]
-                                    ))
             if prototypes == 'Top':
                 df_class = DF_PROBS.loc[DF_PROBS['Class']==classe]
                 nproto = min(nprototypes, len(df_class.index))
@@ -764,10 +766,21 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette, prototypes, nprototypes
                                            # opacity=alpha,
                                            marker=dict(color=marker_color_str,
                                                        symbol='diamond',
-                                                       size=8),
+                                                       size=5),
                                            name=classe,
                                            text=ids[idx_proto]
                                           ))
+            traces.append(go.Scatter3d(x = tsne_coord[idx, 0].squeeze(),
+                                       y = tsne_coord[idx, 1].squeeze(),
+                                       z = tsne_coord[idx, 2].squeeze(),
+                                       mode='markers',
+                                       opacity=alpha,
+                                       marker=dict(size=3,
+                                                   color = marker_color_str),
+                                       name=classe,
+                                       text=ids[idx]
+                                    ))
+
     if ndim==2:
         return {
             'data': traces,

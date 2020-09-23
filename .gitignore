@@ -5,4 +5,5 @@
 *.pyc
 Notebooks/.ipynb_checkpoints/3_Motifs_clustering-checkpoint.ipynb
 Notebooks/.ipynb_checkpoints/0_Train-checkpoint.ipynb
-.vscode/settings.json
+.vscode/
+.vs/
