@@ -55,6 +55,7 @@ def parseArguments_overlay():
     parser.add_argument('--end', help='int, end time range for selecting data. Useful to ignore part of the '
                                         'data were irrelevant measurement were acquired. Set to -1 for automatic detection.',
                         type=int, default=-1)
+    parser.add_argument('-p', '--port', help='int, port on which to start the application.', type=int, default=8051)
     args = parser.parse_args()
     return(args)
 
@@ -1072,4 +1073,4 @@ def export_selection(nclicks, selected_points, curr_style, export_options):
 
 # ----------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-    app.run_server(debug=False, port=8051)
+    app.run_server(debug=False, port=args.port)
