@@ -27,6 +27,7 @@ from functools import reduce
 import argparse
 import json
 import plotly.express as px
+from tooltips import make_tooltips
 
 #Todo: ID upload, selection hover/click mode, correct centering and dashed lines when time is not increasing 1 by 1
 def parseArguments_overlay():
@@ -55,7 +56,7 @@ def parseArguments_overlay():
     parser.add_argument('--end', help='int, end time range for selecting data. Useful to ignore part of the '
                                         'data were irrelevant measurement were acquired. Set to -1 for automatic detection.',
                         type=int, default=-1)
-    parser.add_argument('-p', '--port', help='int, port on which to start the application.', type=int, default=8051)
+    parser.add_argument('-p', '--port', help='int, port on which to start the application.', type=int, default=8050)
     args = parser.parse_args()
     return(args)
 
@@ -252,7 +253,6 @@ PALETTES = {
     'Dark24': list(map(hex_to_rgb, px.colors.qualitative.Dark24))
 }
 
-
 # ----------------------------------------------------------------------------------------------------------------------
 # App layout
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -430,7 +430,8 @@ card_scatterplot = dbc.Card(
                     updatemode='mouseup',
                     marks={i: {'label': i} for i in range(1, 21, 5)}
                 )
-            ]
+            ],
+            id='formgroup-slider-density'
         )
     ],
     body = True
@@ -464,7 +465,8 @@ card_plot = dbc.Card(
                     updatemode='mouseup',
                     marks={i:{'label': i} for i in range(1, 21, 5)}
                 )
-            ]
+            ],
+            id = 'formgroup-slider-proto'
         ),
         dcc.Checklist(
             id = 'check-xrange',
@@ -503,12 +505,22 @@ button_collapse = dbc.Button(
                     color='primary'
                   )
 
-button_submit = dbc.Button(
-                    '\u21BB Run t-SNE',
-                    id='submit-tsne',
-                    n_clicks=0,
-                    color='primary'
-                )
+button_submit = html.Div(
+    [
+        dbc.Spinner(
+            html.Div(id='loading-tsne'),
+            size='md',
+            color='primary'
+        ),
+        dbc.Button(
+            '\u21BB Run t-SNE',
+            id='submit-tsne',
+            n_clicks=0,
+            color='primary'
+        )
+    ],
+    style={'display': 'inline-block'}  # center the button and the spinner
+)
 
 button_export = dbc.Button(
                     '\u2913 Export selection',
@@ -532,6 +544,8 @@ dropdown_export = dcc.Dropdown(
     value = ['Class', 'Coord', 'Probability', 'Feature', 'Crop'],
     placeholder = 'Select elements to export'
 )
+
+tooltips = make_tooltips()
 
 app.layout = dbc.Container(
     [
@@ -593,10 +607,9 @@ app.layout = dbc.Container(
             align = 'center',
             no_gutters = True
         ),
-    ],
+    ] + tooltips,
     fluid=True,
 )
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Collapse menu with parameters
@@ -650,6 +663,52 @@ def show_placeholder(overlay_value, curr_target, curr_bin):
         return out
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Disable sliders number prototypes if no prototype method selected
+@app.callback(
+    Output('slider-proto', 'disabled'),
+    [Input('drop-proto', 'value')]
+)
+def disable_slider_proto(droproto_value):
+    if droproto_value == 'None':
+        return True
+    else:
+        return False
+
+@app.callback(
+    Output('formgroup-slider-proto', 'style'),
+    [Input('drop-proto', 'value')],
+)
+def grey_out_proto(droproto_value):
+    if droproto_value == 'None':
+        return {'display': 'none'}
+        #return {'color': 'rgb(158, 158, 158)'}
+    else:
+        return {}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Disable sliders number bins if no density plotted
+@app.callback(
+    Output('slider-density', 'disabled'),
+    [Input('check-density', 'value')]
+)
+def disable_slider_density(checkdensity_value):
+    if checkdensity_value:
+        return False
+    else:
+        return True
+
+@app.callback(
+    Output('formgroup-slider-density', 'style'),
+    [Input('check-density', 'value')],
+)
+def grey_out_density(checkdensity_value):
+    if checkdensity_value:
+        return {}
+    else:
+        return {'display': 'none'}
+        #return {'color': 'rgb(158, 158, 158)'}
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Change alpha of points upon checking prototypes for better highlight
 @app.callback(
     Output('slider-alpha', 'value'),
@@ -664,7 +723,8 @@ def change_alpha(prototypes):
 # ----------------------------------------------------------------------------------------------------------------------
 # Compute t-SNE coordinates and store them in a hidden division for sharing between callbacks
 @app.callback(
-    Output('hidden-tsne', 'children'),
+    [Output('hidden-tsne', 'children'),
+     Output('loading-tsne', 'children')],
     [Input('submit-tsne', 'n_clicks')],
     [State('drop-layer', 'value'),
      State('drop-init', 'value'),
@@ -679,7 +739,7 @@ def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
                                    ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter)
     # Need to convert numpy arrays to list for JSON conversion
     toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
-    return json.dumps(toStore)
+    return json.dumps(toStore), None
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Plot t-SNE embedding
