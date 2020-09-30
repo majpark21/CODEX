@@ -848,8 +848,9 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette, prototypes, nprototypes
             'layout': go.Layout(
                 xaxis={'title': 't-SNE 1'},
                 yaxis={'title': 't-SNE 2'},
-                hovermode='closest'
-            )
+                hovermode='closest',
+                uirevision=dict_tsne  # Reset zoom, pan, etc, only when tSNE is updated
+            ),
         }
     if ndim==3:
         return {
@@ -860,7 +861,8 @@ def plot_tsne(dict_tsne, alpha, density, nbins, palette, prototypes, nprototypes
                   yaxis={'title': 't-SNE 2'},
                   #zaxis={'title': 't-SNE 3'}
                 ),
-                hovermode='closest'
+                hovermode='closest',
+                uirevision=dict_tsne  # Reset zoom, pan, etc, only when tSNE is updated
             )
         }
 
@@ -894,7 +896,8 @@ def update_plot_meas(hoverData, yrange, xshow, xcheck, overlay, target, bin):
                     'title': hovered_cell,
                     'xaxis':{'title': 'Time'},
                     'yaxis':{'title': measurement,
-                             'range': [yrange[0],yrange[1]]}
+                             'range': [yrange[0],yrange[1]]},
+                    'uirevision': 'foo'  # Never reset zoom, pan, etc.
                 }
             }
 
@@ -958,7 +961,8 @@ def update_plot_meas(hoverData, yrange, xshow, xcheck, overlay, target, bin):
                     'title': hovered_cell,
                     'xaxis':{'title': 'Time'},
                     'yaxis':{'title': measurement,
-                             'range': [yrange[0],yrange[1]]}
+                             'range': [yrange[0],yrange[1]]},
+                    'uirevision': 'foo'  # Never reset zoom, pan, etc.
                 }
             }
 
