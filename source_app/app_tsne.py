@@ -1021,27 +1021,49 @@ def update_plot_meas(hoverData, yrange, xshow, xcheck, overlay, target, bin):
     [Input('plot-tsne', 'hoverData')]
 )
 def update_table_proba(selected_id):
-    def generate_table(dataframe, hilight_class, max_rows=10):
-        return html.Table(
-            # Header
-            [html.Tr([html.Th(col, style = {'border-bottom': '1px solid black'})
-            if col != hilight_class
-            else html.Th(col, style={'background-color': 'red', 'border-bottom': '1px solid black'})
-            for col in dataframe.columns])] +
+    def generate_table(dataframe, hilight_class, hilight_pred):
+        dict_styles = {
+            col:{}
+            for col in dataframe.columns
+        }
+        if hilight_class != hilight_pred:
+            dict_styles.update({
+                hilight_class: {'background-color':'#96ceb4'},
+                hilight_pred: {'background-color':'#ff6f69'}
+            })
+        else:
+            dict_styles.update({
+                hilight_class: {'background-color':'#ffcc5c'}
+            })
 
-            # Body
-            [html.Tr([
-                html.Td(dataframe.iloc[i][col], style = {'border-bottom': '1px solid black'}) for col in dataframe.columns
-            ]) for i in range(min(len(dataframe), max_rows))],
-            style = {'border-collapse': 'collapse', 'width': '100%'}
+        table_header = [
+            html.Tr([
+                    html.Th(col, style=dict_styles[col])
+                    for col in dataframe.columns
+                ])
+        ]
+
+        table_body = [
+            html.Tr([
+                html.Td(dataframe.iloc[i][col]) for col in dataframe.columns
+            ])
+            for i in range(len(dataframe))
+        ]
+
+        return dbc.Table(
+            table_header + table_body,
+            striped=True,
+            responsive=True  # horizontal scroll possible on the table
         )
+
     if selected_id is not None:
         cell_id = selected_id['points'][0]['text']
         cell_class = classes_dict[df.loc[df['ID'] == cell_id]['Class'].unique()[0]]
         cell_probs = DF_PROBS.loc[[cell_id]]
         cell_probs.drop('Class', axis=1, inplace=True)
         cell_probs = round(cell_probs, 4)
-        return generate_table(cell_probs, cell_class)
+        cell_predict = cell_probs.idxmax(1)[0]  # Name of the predicted class
+        return generate_table(cell_probs, cell_class, cell_predict)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
