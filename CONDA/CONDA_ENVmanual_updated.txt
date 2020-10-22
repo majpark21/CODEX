@@ -1,0 +1,16 @@
+conda create -n codex_updated
+conda activate codex_updated
+
+conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+
+conda install -c plotly plotly -y
+conda install pandas -y
+conda install -c conda-forge notebook -y
+conda install seaborn -y
+conda install -c conda-forge tqdm -y
+conda install -c conda-forge scikit-image -y
+conda install scikit-learn -y
+
+pip install datatable  # unavailable on windows, just used to speed up table reading in DataProcesser. Can proceeed without running this line.
+pip install dash-bootstrap-components
+conda install tensorboard
