@@ -112,7 +112,7 @@ if(is.null(col_id) | col_id == "NULL"){
 time_max <- ceiling(len/n_channel)
 
 # Plot sample from each cluster4x4 on different PDF pages
-dt_plot <- melt(dt_patt, id.vars = "pattID")
+dt_plot <- data.table::melt(dt_patt, id.vars = "pattID")
 dt_plot[, Measure := str_extract(variable, "^[A-Za-z]+")][, Measure := factor(Measure, unique(Measure))]
 dt_plot[, Time := as.numeric(str_extract(variable, "[0-9]+$"))]
 dt_plot <- dt_plot[Time <= time_max]

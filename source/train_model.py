@@ -1,5 +1,5 @@
 ###############################################################
-# Train CNN for classification, output logs with tensorboardX #
+# Train CNN for classification, output logs with tensorboard  #
 ###############################################################
 #TODO: Use FixedCrop for test loader?
 
@@ -12,7 +12,7 @@ from models import ConvNetCam, ConvNetCamBi
 from class_dataset import myDataset, ToTensor, Subtract, RandomShift, RandomNoise, RandomCrop, FixedCrop
 from train_utils import accuracy, AverageMeter
 import datetime
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import os
 import zipfile
 import time
