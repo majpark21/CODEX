@@ -52,7 +52,7 @@ CODEX is mostly written in python and uses the powerful [Pytorch library](https:
 1. From there, you have 2 options to install CODEX's Conda environment depending on your system:
     1. For Windows and Linux users. If you have a compatible GPU and CUDA 10 or CUDA 11 installed, the easiest way is to install the Conda environment with the .yml file provided in this repo. To do so, in command line (or Anaconda prompt on Windows) navigate to the location of the repository and type:
     ```
-    # For CUDA 10, Windows and Linux only
+    # For CUDA 10 or CUDA 11, Windows and Linux only
     conda env create -f CONDA/CONDA_ENV_CUDA102.yml
     ```  
     2. For OSX users or if you do not have a compatible GPU or if you have CUDA 9, create the Conda environment manually. To do so, follow the instructions in `CONDA/CONDA_ENVmanual.txt`.
