@@ -44,16 +44,16 @@ We strongly encourage to use the notebooks to run all analysis, they contain det
 
 ## Installation
 
-CODEX is mostly written in python and uses the powerful [Pytorch library](https://pytorch.org/) for artificial neural networks. In addition, some helper scripts for the motifs mining analysis are written in R. CODEX was tested on Ubuntu 16, Ubuntu 18 and Windows 10.
+CODEX is mostly written in python and uses the powerful [Pytorch library](https://pytorch.org/) for artificial neural networks. In addition, some helper scripts for the motifs mining analysis are written in R. CODEX was tested on Ubuntu 16, Ubuntu 18, Ubuntu 20 and Windows 10.
 
 ### Python part
 
-0. Prerequisites: Clone this repository and make sure that you have a recent version of [Anaconda](https://www.anaconda.com) installed (Python 3 required, Python 2 not supported).
+0. Prerequisites: Clone this repository and make sure that you have a recent version of [Anaconda](https://www.anaconda.com) installed (Python 3 required, Python 2 not supported; tested with Python 3.7 and 3.8).
 1. From there, you have 2 options to install CODEX's Conda environment depending on your system:
-    1. For Windows and Linux users. If you have a compatible GPU and CUDA 10 installed, the easiest way is to install the Conda environment with the .yml file provided in this repo. To do so, in command line (or Anaconda prompt on Windows) navigate to the location of the repository and type:
+    1. For Windows and Linux users. If you have a compatible GPU and CUDA 10 or CUDA 11 installed, the easiest way is to install the Conda environment with the .yml file provided in this repo. To do so, in command line (or Anaconda prompt on Windows) navigate to the location of the repository and type:
     ```
     # For CUDA 10, Windows and Linux only
-    conda env create -f CONDA/CONDA_ENV_CUDA10.yml
+    conda env create -f CONDA/CONDA_ENV_CUDA102.yml
     ```  
     2. For OSX users or if you do not have a compatible GPU or if you have CUDA 9, create the Conda environment manually. To do so, follow the instructions in `CONDA/CONDA_ENVmanual.txt`.
 
@@ -67,9 +67,9 @@ Follow the next section if you want to use Notebook 3 for clustering CAM-based m
 
 ### R part (recommended, only used for the motif mining analysis)
 
-A couple of R scripts are used to compute the Dynamic Time Warping (DTW) distance and cluster class-specific motifs. These operations are run after the actual extraction of the motifs and are here to help tidying the results for interpretation. This step is optional but recommended. Alternatively, you can write your own pipeline to compute the distance matrix and cluster the motifs from the exported file that contains the motifs.
+A couple of R scripts are used to compute Dynamic Time Warping (DTW) distance and cluster class-specific motifs. These operations are run after the actual extraction of the motifs and are here to help tidying the results for interpretation. This step is optional but recommended. Alternatively, you can write your own pipeline to compute the distance matrix and cluster the motifs from the exported file that contains the motifs.
 
-0. Prerequisites: Have a working [R](https://www.r-project.org/) installation (> 3.5).
+0. Prerequisites: Have a working [R](https://www.r-project.org/) installation (> 3.5; tested with R 3.5,3.6 and 4.0).
 1. Install the following R packages: `argparse, data.table, proxy, dtw, parallelDist, reshape2, ggplot2, stringr, dendextend`
 2. You will need to manually change the first line in both R scripts: `dtw_multivar_distmat.R` and `pattern_clustering.R`. On this line, in both files, change the variable `user_lib` such that it contains the path that points to the directory where your personal R packages are installed. For example in Windows, this path should look like: `'C:/Users/myUserName/Documents/R/win-library/X.X'` where X.X is the version of R; in Linux, this path should look like: `'/home/myUserName/R/x86_64-pc-linux-gnu-library/X.X'`.
 

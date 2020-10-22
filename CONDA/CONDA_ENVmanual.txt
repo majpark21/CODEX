@@ -1,29 +1,30 @@
-# If installation through .yml doesn't work or if you are a Mac user or if you do not have CUDA 10 follow these steps to create CODEX conda environment (python 3.7)
+# If installation through .yml doesn't work or if you are a Mac user or if you want to choose which version of CUDA to use, follow these steps to create CODEX conda environment (python 3.7 or 3.8)
 # In the command line (or Anaconda prompt):
 conda create -n codex
 conda activate codex
 
-# Run the line that corresponds to your system (from https://pytorch.org/get-started/previous-versions/#v110)
-# OSX
-# conda install pytorch==1.1.0 torchvision==0.3.0 -c pytorch -y
+# Run the line that corresponds to your system (from https://pytorch.org/)
+# OSX 
+# conda install pytorch torchvision -c pytorch
 # Linux and Windows
-# CUDA 9
-# conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch -y
-# CUDA 10
-# conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=10.0 -c pytorch -y
-# CPU Only
-# conda install pytorch-cpu==1.1.0 torchvision-cpu==0.3.0 cpuonly -c pytorch -y
+# CUDA 9.2 (Linux only)
+# conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+# CUDA 10.1
+# conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
+# CUDA 10.2 (should also work for CUDA 11)
+# conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+# CPU only
+# conda install pytorch torchvision cpuonly -c pytorch
 
-conda install -c plotly plotly=4.5.0 -y
+conda install -c plotly plotly -y
 conda install pandas -y
 conda install -c conda-forge notebook -y
 conda install seaborn -y
-pip install tensorboardX
-conda install -c conda-forge tensorboard -y
 conda install -c conda-forge tqdm -y
 conda install -c conda-forge scikit-image -y
-pip install datatable  # unavailable on windows, just used to speed up table reading in DataProcesser. Can proceeed without running this line.
-pip install tsfresh
+conda install scikit-learn -y
+conda install tensorboard
 pip install dash-bootstrap-components
 
-pip install Pillow==6.1 # downgrade if 7.0, incompatible with pytorch 1.1
+# Unavailable on Windows, just used to speed up table reading in DataProcesser. Can proceeed without running this line.
+pip install datatable  
