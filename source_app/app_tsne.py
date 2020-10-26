@@ -186,7 +186,7 @@ del data  # Free some memory
 # Compute tSNE coords, model output, store cropping info for plotting
 # No grad to save GPU memory, no backward pass is done here
 @torch.no_grad()
-def tsne(model, dataloader, device, layer_feature='pool', ncomp=2, ini='pca', perplex=30.0, lr=200.0, niter=250):
+def tsne(model, dataloader, device, layer_feature='pool', ncomp=2, ini='pca', perplex=30.0, lr=200.0, niter=250, exag=12, metric='euclidean'):
     df_out = model_output_app(model, dataloader, export_prob=True, export_feat=True, device=device,
                               feature_layer=layer_feature, export_crop_pos=rand_crop)
     df_out['Class'].replace(classes_col, inplace=True)
@@ -220,7 +220,7 @@ def tsne(model, dataloader, device, layer_feature='pool', ncomp=2, ini='pca', pe
     # One row for each trajectory, columns according to the number of features
     feature_blobs_array = np.array(df_out[feat_cols])
     feature_embedded = TSNE(n_components=ncomp, init=ini, perplexity=perplex,
-                            learning_rate=lr, n_iter=niter, verbose=2).fit_transform(feature_blobs_array)
+                            learning_rate=lr, n_iter=niter, verbose=2, early_exaggeration=exag, metric=metric).fit_transform(feature_blobs_array)
 
     return feature_embedded, label, identifier
 
@@ -338,6 +338,35 @@ card_tsne_params = dbc.Card(
         ),
     ],
     body = True
+)
+
+card_tsne_params_advanced = dbc.Card(
+    [
+        dbc.FormGroup(
+            [
+                dbc.Label('Early exaggeration:'),
+                dbc.Input(
+                    id='input-exaggeration',
+                    value=12,
+                    type='number',
+                    placeholder='Early exxageration for 250 iterations',
+                    min=1
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Distance:'),
+                dcc.Dropdown(
+                    id='drop-distance',
+                    options=[{'label': i, 'value': i} for i in ['euclidean', 'cityblock', 'cosine']],
+                    clearable = False,
+                    value = 'euclidean'
+                )
+            ]
+        )
+    ],
+    body=True
 )
 
 card_overlay = dbc.Card(
@@ -505,6 +534,12 @@ button_collapse = dbc.Button(
                     color='primary'
                   )
 
+check_collapse_advanced = dcc.Checklist(
+    id='check-advanced',
+    value = [],
+    options=[{'label': ' Show advanced TSNE options', 'value': True}]
+)
+
 button_submit = html.Div(
     [
         dbc.Spinner(
@@ -552,7 +587,12 @@ app.layout = dbc.Container(
         # Hidden division used to store the tSNE coordinates, this way can
         # update the plot appearance without recomputing the tSNE
         html.Div(id='hidden-tsne', style={'display': 'none'}),
-        button_collapse,
+        dbc.Row(
+            [
+                dbc.Col(button_collapse, width=2),
+                dbc.Col(check_collapse_advanced, width=2)
+            ]
+        ),
         dbc.Collapse(
             dbc.Row(
                 [
@@ -574,11 +614,26 @@ app.layout = dbc.Container(
                     )
                 ],
                 align='end',
-                justify='around',
+                justify='start',
                 style={'background-color': '#f8f9fa', 'padding': '15px 5px 20px 20px', 'borderBottom': 'thin lightgrey solid'}
             ),
         id ='collapse',
         is_open=True
+        ),
+        dbc.Collapse(
+            dbc.Row(
+                [
+                    dbc.Col(
+                        card_tsne_params_advanced,
+                        width=2
+                    )
+                ],
+                align='end',
+                justify='around',
+                style={'background-color': '#f8f9fa', 'padding': '15px 5px 20px 20px', 'borderBottom': 'thin lightgrey solid'}
+            ),
+            id='collapse-advanced',
+            is_open=False
         ),
         dbc.Row(
             [
@@ -623,6 +678,17 @@ def toggle_collapse(n, is_open):
         return not is_open
     return is_open
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Collapse menu with advanced options
+@app.callback(
+    Output("collapse-advanced", "is_open"),
+    [Input("check-advanced", "value")]
+)
+def toggle_collapse_advanced(checkval):
+    if checkval:
+        return True
+    else:
+        return False
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Disable dropdowns of CAMs/backprop if no overlay selected
@@ -731,12 +797,14 @@ def change_alpha(prototypes):
      State('drop-ndim', 'value'),
      State('input-lr', 'value'),
      State('input-perp', 'value'),
-     State('input-niter', 'value')]
+     State('input-niter', 'value'),
+     State('input-exaggeration', 'value'),
+     State('drop-distance', 'value')]
 )
-def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter):
+def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter, exagg, metr):
     globals()
     tsne_coord, labels, ids = tsne(model=net, dataloader=mydataloader, device=device, layer_feature=layer,
-                                   ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter)
+                                   ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter, exag=exagg, metric=metr)
     # Need to convert numpy arrays to list for JSON conversion
     toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
     return json.dumps(toStore), None
