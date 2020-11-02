@@ -591,7 +591,9 @@ app.layout = dbc.Container(
             [
                 dbc.Col(button_collapse, width=2),
                 dbc.Col(check_collapse_advanced, width=2)
-            ]
+            ],
+            align='center',
+            justify='start',
         ),
         dbc.Collapse(
             dbc.Row(
