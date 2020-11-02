@@ -28,6 +28,8 @@ import argparse
 import json
 import plotly.express as px
 from tooltips import make_tooltips
+import io
+import base64
 
 #Todo: ID upload, selection hover/click mode, correct centering and dashed lines when time is not increasing 1 by 1
 def parseArguments_overlay():
@@ -550,30 +552,52 @@ card_load_precomputed = dbc.Card(
         ),
         dbc.FormGroup(
             [
-                dbc.Label('X coordinates'),
+                dbc.Label('X coordinates column:'),
                 dcc.Dropdown(
-                    id='drop-x-coord',
-                    options=[
-                        {'label': 'first choice', 'value': '__'},
-                        {'label': 'second choice', 'value': '__'}
-                    ],
-                    clearable=False
+                    id='drop-x-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
                 )
             ]
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Y coordinates'),
+                dbc.Label('Y coordinates column:'),
                 dcc.Dropdown(
-                    id='drop-y-coord',
-                    options=[
-                        {'label': 'first choice', 'value': '__'},
-                        {'label': 'second choice', 'value': '__'}
-                    ],
-                    clearable=False
+                    id='drop-y-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
                 )
             ]
         ),
+        dbc.FormGroup(
+            [
+                dbc.Label('ID column:'),
+                dcc.Dropdown(
+                    id='drop-id-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Group column:'),
+                dcc.Dropdown(
+                    id='drop-group-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
+                )
+            ]
+        )
     ],
     body=True,
     style={'display': 'none'},  # hide upon booting up
@@ -665,6 +689,8 @@ app.layout = dbc.Container(
         # Hidden division used to store the tSNE coordinates, this way can
         # update the plot appearance without recomputing the tSNE
         html.Div(id='hidden-tsne', style={'display': 'none'}),
+        # Hidden division used to store upload content
+        html.Div(id='hidden-upload', style={'display': 'none'}),
         dbc.Row(
             [
                 dbc.Col(button_collapse, width=2),
@@ -890,6 +916,102 @@ def change_alpha(prototypes):
         return 1
     else:
         return 0.25
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Read t-SNE coordinates from a file and store the table in a hidden division, also set values in dropdowns
+@app.callback(
+    [Output('hidden-upload', 'children'),
+    Output('drop-x-column', 'options'),
+    Output('drop-y-column', 'options'),
+    Output('drop-id-column', 'options'),
+    Output('drop-group-column', 'options'),
+    Output('drop-x-column', 'disabled'),
+    Output('drop-y-column', 'disabled'),
+    Output('drop-id-column', 'disabled'),
+    Output('drop-group-column', 'disabled'),
+    Output('drop-x-column', 'placeholder'),
+    Output('drop-y-column', 'placeholder'),
+    Output('drop-id-column', 'placeholder'),
+    Output('drop-group-column', 'placeholder')],
+    [Input('upload-precomputed', 'contents')],
+    [State('upload-precomputed', 'filename'),
+    State('drop-x-column', 'options'),
+    State('drop-y-column', 'options'),
+    State('drop-id-column', 'options'),
+    State('drop-group-column', 'options')]
+)
+def read_upload(contents, filename, xcont, ycont, idcont, grcont):
+    # Do nothing when no file loaded (avoid error at initialization)
+    if contents is None:
+        plchldr = 'Upload first'
+        return (
+            None,
+            xcont,
+            ycont,
+            idcont,
+            grcont,
+            True,
+            True,
+            True,
+            True,
+            plchldr,
+            plchldr,
+            plchldr,
+            plchldr
+        )
+
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+
+    try:
+        if 'csv' in filename:
+            # Assume that the user uploaded a CSV file
+            df = pd.read_csv(
+                io.StringIO(decoded.decode('utf-8')))
+        elif 'xls' in filename:
+            # Assume that the user uploaded an excel file
+            df = pd.read_excel(io.BytesIO(decoded))
+    except Exception as e:
+        print(e)
+        return html.Div([
+            'There was an error processing this file.'
+        ])
+
+    toStore = df.to_dict()
+    colnames = list(df.columns)
+    dict_colnames = [{'label':col, 'value': col} for col in colnames]
+    return (
+        json.dumps(toStore),
+        dict_colnames,
+        dict_colnames,
+        dict_colnames,
+        dict_colnames,
+        False,
+        False,
+        False,
+        False,
+        'Select column',
+        'Select column',
+        'Select column',
+        'Select column'
+    )
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Read t-SNE coordinates from upload division and store in tsne division
+# @app.callback(
+#     Output('hidden-tsne', 'children'),
+#     [Input('button-load-tsne', 'n_clicks')],
+#     [State('drop-x-column', 'value'),
+#      State('drop-y-column', 'value'),
+#      State('drop-id-column', 'value'),
+#      State('drop-group-column', 'value')]
+# )
+# def gettsne_fromupload(n_clicks, xcol, ycol, idcol, grcol):
+#     toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
+#     return toStore
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Compute t-SNE coordinates and store them in a hidden division for sharing between callbacks
