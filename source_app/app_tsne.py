@@ -296,6 +296,7 @@ card_tsne = dbc.Card(
         ),
     ],
     body = True,
+    id = 'card-tsne'
 )
 
 card_tsne_params = dbc.Card(
@@ -337,7 +338,8 @@ card_tsne_params = dbc.Card(
             ]
         ),
     ],
-    body = True
+    body = True,
+    id = 'card-tsne-params'
 )
 
 card_tsne_params_advanced = dbc.Card(
@@ -527,6 +529,57 @@ card_plot = dbc.Card(
     body = True
 )
 
+card_load_precomputed = dbc.Card(
+    [   
+        dcc.Upload(
+            id='upload-precomputed',
+            children=html.Div([
+                'Drag and Drop or ',
+                html.A('Select Files')
+            ]),
+            style={
+                'width': '100%',
+                'height': '60px',
+                'lineHeight': '60px',
+                'borderWidth': '1px',
+                'borderStyle': 'dashed',
+                'borderRadius': '5px',
+                'textAlign': 'center',
+                'margin': '10px'
+            }
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('X coordinates'),
+                dcc.Dropdown(
+                    id='drop-x-coord',
+                    options=[
+                        {'label': 'first choice', 'value': '__'},
+                        {'label': 'second choice', 'value': '__'}
+                    ],
+                    clearable=False
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Y coordinates'),
+                dcc.Dropdown(
+                    id='drop-y-coord',
+                    options=[
+                        {'label': 'first choice', 'value': '__'},
+                        {'label': 'second choice', 'value': '__'}
+                    ],
+                    clearable=False
+                )
+            ]
+        ),
+    ],
+    body=True,
+    style={'display': 'none'},  # hide upon booting up
+    id = 'card-load-precomputed'
+)
+
 
 button_collapse = dbc.Button(
                     'Fold parameters menu \u25BE',
@@ -537,7 +590,13 @@ button_collapse = dbc.Button(
 check_collapse_advanced = dcc.Checklist(
     id='check-advanced',
     value = [],
-    options=[{'label': ' Show advanced TSNE options', 'value': True}]
+    options=[{'label': ' Show advanced tSNE options', 'value': True}]
+)
+
+check_precomputed = dcc.Checklist(
+    id='check-precomputed',
+    value = [],
+    options=[{'label': ' Load precomputed tSNE','value': True},]
 )
 
 button_submit = html.Div(
@@ -551,10 +610,29 @@ button_submit = html.Div(
             '\u21BB Run t-SNE',
             id='submit-tsne',
             n_clicks=0,
-            color='primary'
+            color='primary',
         )
     ],
+    id='div-submit-button',
     style={'display': 'inline-block'}  # center the button and the spinner
+)
+
+button_load = html.Div(
+    [
+        dbc.Spinner(
+            html.Div(id='loading-tsne-file'),
+            size='md',
+            color='success'
+        ),
+        dbc.Button(
+            '\u21BB Load t-SNE',
+            id='button-load-tsne',
+            n_clicks=0,
+            color='success',
+        )
+    ],
+    id='div-load-button',
+    style={'display': 'none'}  # center the button and the spinner
 )
 
 button_export = dbc.Button(
@@ -590,7 +668,8 @@ app.layout = dbc.Container(
         dbc.Row(
             [
                 dbc.Col(button_collapse, width=2),
-                dbc.Col(check_collapse_advanced, width=2)
+                dbc.Col(check_collapse_advanced, width=2),
+                dbc.Col(check_precomputed, width=2)
             ],
             align='center',
             justify='start',
@@ -601,19 +680,24 @@ app.layout = dbc.Container(
                     dbc.Col(
                         dbc.CardDeck(
                             [
+                                card_load_precomputed,
                                 card_tsne,
                                 card_tsne_params,
                                 card_overlay,
                                 card_scatterplot,
                                 card_plot
-                            ]
+                            ],
+                            id='main_deck'
                         ),
                         width = 10
                     ),
                     dbc.Col(
-                        button_submit,
+                        [
+                            button_submit,
+                            button_load
+                        ],
                         width = 2
-                    )
+                    ),
                 ],
                 align='end',
                 justify='start',
@@ -671,9 +755,9 @@ app.layout = dbc.Container(
 # ----------------------------------------------------------------------------------------------------------------------
 # Collapse menu with parameters
 @app.callback(
-    Output("collapse", "is_open"),
-    [Input("collapse-button", "n_clicks")],
-    [State("collapse", "is_open")],
+    Output('collapse', 'is_open'),
+    [Input('collapse-button', 'n_clicks')],
+    [State('collapse', 'is_open')],
 )
 def toggle_collapse(n, is_open):
     if n:
@@ -683,14 +767,33 @@ def toggle_collapse(n, is_open):
 # ----------------------------------------------------------------------------------------------------------------------
 # Collapse menu with advanced options
 @app.callback(
-    Output("collapse-advanced", "is_open"),
-    [Input("check-advanced", "value")]
+    Output('collapse-advanced', 'is_open'),
+    [Input('check-advanced', 'value')]
 )
 def toggle_collapse_advanced(checkval):
     if checkval:
         return True
     else:
         return False
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Change menu of parameters for loading precomputed tSNE
+@app.callback(
+    [
+        Output('card-tsne', 'style'),
+        Output('card-tsne-params', 'style'),
+        Output('div-submit-button', 'style'),
+        Output('card-load-precomputed', 'style'),
+        Output('div-load-button', 'style')
+    ],
+    [Input('check-precomputed', 'value')]
+)
+def toggle_precomputed(checkval):
+    if checkval:
+        return {'display': 'none'}, {'display': 'none'}, {'display': 'none'}, {}, {'display': 'inline-block'}
+    else:
+        return {}, {}, {'display': 'inline-block'}, {'display': 'none'}, {'display': 'none'}
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Disable dropdowns of CAMs/backprop if no overlay selected
