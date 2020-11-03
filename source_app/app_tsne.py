@@ -30,8 +30,9 @@ import plotly.express as px
 from tooltips import make_tooltips
 import io
 import base64
+import os
 
-#Todo: ID upload, selection hover/click mode, correct centering and dashed lines when time is not increasing 1 by 1
+#TODO: selection hover/click mode
 def parseArguments_overlay():
     parser = argparse.ArgumentParser(description='Project the CNN features with tSNE and browse interactively.')
     parser.add_argument('-m', '--model', help='str, path to the model file', type=str)
@@ -548,7 +549,10 @@ card_load_precomputed = dbc.Card(
                 'borderRadius': '5px',
                 'textAlign': 'center',
                 'margin': '10px'
-            }
+            },
+            # TODO: add "xlrd" and "odfpy" dependencies to conda env to read Excel and ODT files
+            # accept=['.csv', '.xls', '.xlsx', '.xlsm', '.xlsb', '.odf', '.ods', '.odt']
+            accept=['.csv']
         ),
         dbc.FormGroup(
             [
@@ -959,15 +963,17 @@ def read_tsne(contents, filename, xcol, ycol, idcol, grcol):
 
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
-
+    file_name, file_extension = os.path.splitext(filename)
     try:
-        if 'csv' in filename:
+        if file_extension == '.csv':
             # Assume that the user uploaded a CSV file
             df = pd.read_csv(
                 io.StringIO(decoded.decode('utf-8')))
-        elif 'xls' in filename:
-            # Assume that the user uploaded an excel file
-            df = pd.read_excel(io.BytesIO(decoded))
+        # TODO: add "xlrd" and "odfpy" dependencies to conda env to read Excel and ODT files
+        # elif file_extension in ['.xls', '.xlsx', '.xlsm', '.xlsb', '.odf', '.ods', '.odt']:
+        #     # Assume that the user uploaded an excel file
+        #     print('try to read excel')
+        #     df = pd.read_excel(io.BytesIO(decoded))
     except Exception as e:
         print(e)
         return html.Div([
