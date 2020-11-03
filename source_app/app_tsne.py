@@ -643,11 +643,6 @@ button_submit = html.Div(
 
 button_load = html.Div(
     [
-        dbc.Spinner(
-            html.Div(id='loading-tsne-file'),
-            size='md',
-            color='success'
-        ),
         dbc.Button(
             '\u21BB Load t-SNE',
             id='button-load-tsne',
@@ -690,7 +685,8 @@ app.layout = dbc.Container(
         # update the plot appearance without recomputing the tSNE
         html.Div(id='hidden-tsne', style={'display': 'none'}),
         # Hidden division used to store upload content
-        html.Div(id='hidden-upload', style={'display': 'none'}),
+        html.Div(id='hidden-upload-raw', style={'display': 'none'}),
+        html.Div(id='hidden-upload-ready', style={'display': 'none'}),
         dbc.Row(
             [
                 dbc.Col(button_collapse, width=2),
@@ -921,7 +917,7 @@ def change_alpha(prototypes):
 # ----------------------------------------------------------------------------------------------------------------------
 # Read t-SNE coordinates from a file and store the table in a hidden division, also set values in dropdowns
 @app.callback(
-    [Output('hidden-upload', 'children'),
+    [Output('hidden-upload-raw', 'children'),
     Output('drop-x-column', 'options'),
     Output('drop-y-column', 'options'),
     Output('drop-id-column', 'options'),
@@ -941,16 +937,16 @@ def change_alpha(prototypes):
     State('drop-id-column', 'options'),
     State('drop-group-column', 'options')]
 )
-def read_upload(contents, filename, xcont, ycont, idcont, grcont):
+def read_tsne(contents, filename, xcol, ycol, idcol, grcol):
     # Do nothing when no file loaded (avoid error at initialization)
     if contents is None:
         plchldr = 'Upload first'
         return (
             None,
-            xcont,
-            ycont,
-            idcont,
-            grcont,
+            xcol,
+            ycol,
+            idcol,
+            grcol,
             True,
             True,
             True,
@@ -978,7 +974,7 @@ def read_upload(contents, filename, xcont, ycont, idcont, grcont):
             'There was an error processing this file.'
         ])
 
-    toStore = df.to_dict()
+    toStore = df.to_dict(orient='list')
     colnames = list(df.columns)
     dict_colnames = [{'label':col, 'value': col} for col in colnames]
     return (
@@ -997,28 +993,30 @@ def read_upload(contents, filename, xcont, ycont, idcont, grcont):
         'Select column'
     )
 
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Read t-SNE coordinates from upload division and store in tsne division
-# @app.callback(
-#     Output('hidden-tsne', 'children'),
-#     [Input('button-load-tsne', 'n_clicks')],
-#     [State('drop-x-column', 'value'),
-#      State('drop-y-column', 'value'),
-#      State('drop-id-column', 'value'),
-#      State('drop-group-column', 'value')]
-# )
-# def gettsne_fromupload(n_clicks, xcol, ycol, idcol, grcol):
-#     toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
-#     return toStore
-
+@app.callback(
+    Output('hidden-upload-ready', 'children'),
+    [Input('hidden-upload-raw', 'children'),
+    Input('drop-x-column', 'value'),
+    Input('drop-y-column', 'value'),
+    Input('drop-id-column', 'value'),
+    Input('drop-group-column', 'value')]
+)
+def prepare_for_tsne(contents, xcol, ycol, idcol, grcol):
+    if (contents is None) or any(map(lambda x: x is None, [xcol, ycol, idcol, grcol])):
+        return None
+    dict_load = json.loads(contents)
+    tsne_coord = [[x,y] for x,y in zip(dict_load[xcol], dict_load[ycol])]
+    labels, ids = dict_load[grcol], dict_load[idcol]
+    toStore = {'tsne_coord': tsne_coord, 'labels': labels, 'ids': ids}
+    return json.dumps(toStore)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Compute t-SNE coordinates and store them in a hidden division for sharing between callbacks
 @app.callback(
     [Output('hidden-tsne', 'children'),
      Output('loading-tsne', 'children')],
-    [Input('submit-tsne', 'n_clicks')],
+    [Input('submit-tsne', 'n_clicks'),
+    Input('button-load-tsne', 'n_clicks')],
     [State('drop-layer', 'value'),
      State('drop-init', 'value'),
      State('drop-ndim', 'value'),
@@ -1026,15 +1024,24 @@ def read_upload(contents, filename, xcont, ycont, idcont, grcont):
      State('input-perp', 'value'),
      State('input-niter', 'value'),
      State('input-exaggeration', 'value'),
-     State('drop-distance', 'value')]
+     State('drop-distance', 'value'),
+     State('hidden-upload-ready', 'children')]
 )
-def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter, exagg, metr):
-    globals()
-    tsne_coord, labels, ids = tsne(model=net, dataloader=mydataloader, device=device, layer_feature=layer,
-                                   ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter, exag=exagg, metric=metr)
-    # Need to convert numpy arrays to list for JSON conversion
-    toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
-    return json.dumps(toStore), None
+def compute_tsne(n_clicks, n_clicks_load, layer, init, ndim, lrate, perp, n_iter, exagg, metr, loaded_tsne):
+    # Determine which button was clicked
+    ctx = dash.callback_context
+    button_triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    # Upon initilization, run as if clicked submit-tsne button
+    if (not ctx.triggered) or (button_triggered == 'submit-tsne'):
+        globals()
+        tsne_coord, labels, ids = tsne(model=net, dataloader=mydataloader, device=device, layer_feature=layer,
+                                    ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter, exag=exagg, metric=metr)
+        # Need to convert numpy arrays to list for JSON conversion
+        toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
+        out = json.dumps(toStore)
+    elif button_triggered == 'button-load-tsne':
+        out = loaded_tsne
+    return out, None
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Plot t-SNE embedding
