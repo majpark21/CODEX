@@ -926,7 +926,11 @@ def change_alpha(prototypes):
     Output('drop-group-column', 'placeholder'),
     Output('button-upload-precomputed', 'outline'),
     Output('button-upload-precomputed', 'color'),
-    Output('button-upload-precomputed', 'children')],
+    Output('button-upload-precomputed', 'children'),
+    Output('drop-x-column', 'value'),
+    Output('drop-y-column', 'value'),
+    Output('drop-id-column', 'value'),
+    Output('drop-group-column', 'value')],
     [Input('upload-precomputed', 'contents')],
     [State('upload-precomputed', 'filename'),
     State('drop-x-column', 'options'),
@@ -976,6 +980,20 @@ def read_tsne(contents, filename, xcol, ycol, idcol, grcol):
     toStore = df.to_dict(orient='list')
     colnames = list(df.columns)
     dict_colnames = [{'label':col, 'value': col} for col in colnames]
+
+    # Automatically fill in recognized column names
+    # recognized_colnames = {
+    #     'xcol': ['xTSNE'],
+    #     'ycol': ['yTSNE'],
+    #     'idcol': ['ID'],
+    #     'grcol': ['Class']
+    # }
+    prefilled_columns = {}
+    prefilled_columns['xcol'] = 'xTSNE' if 'xTSNE' in colnames else ''
+    prefilled_columns['ycol'] = 'yTSNE' if 'yTSNE' in colnames else ''
+    prefilled_columns['idcol'] = 'ID' if 'ID' in colnames else ''
+    prefilled_columns['grcol'] = 'Class' if 'Class' in colnames else ''
+
     return (
         json.dumps(toStore),
         dict_colnames,
@@ -992,7 +1010,11 @@ def read_tsne(contents, filename, xcol, ycol, idcol, grcol):
         'Select column',
         False,
         'success',
-        filename
+        filename,
+        prefilled_columns['xcol'],
+        prefilled_columns['ycol'],
+        prefilled_columns['idcol'],
+        prefilled_columns['grcol']
     )
 
 @app.callback(
