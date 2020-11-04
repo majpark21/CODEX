@@ -536,20 +536,10 @@ card_load_precomputed = dbc.Card(
     [   
         dcc.Upload(
             id='upload-precomputed',
-            children=html.Div([
-                'Drag and Drop or ',
-                html.A('Select Files')
-            ]),
-            style={
-                'width': '100%',
-                'height': '60px',
-                'lineHeight': '60px',
-                'borderWidth': '1px',
-                'borderStyle': 'dashed',
-                'borderRadius': '5px',
-                'textAlign': 'center',
-                'margin': '10px'
-            },
+            children=dbc.Button(children='Upload .csv file',
+                                outline=True,
+                                color='primary',
+                                id='button-upload-precomputed'),
             # TODO: add "xlrd" and "odfpy" dependencies to conda env to read Excel and ODT files
             # accept=['.csv', '.xls', '.xlsx', '.xlsm', '.xlsb', '.odf', '.ods', '.odt']
             accept=['.csv']
@@ -933,7 +923,10 @@ def change_alpha(prototypes):
     Output('drop-x-column', 'placeholder'),
     Output('drop-y-column', 'placeholder'),
     Output('drop-id-column', 'placeholder'),
-    Output('drop-group-column', 'placeholder')],
+    Output('drop-group-column', 'placeholder'),
+    Output('button-upload-precomputed', 'outline'),
+    Output('button-upload-precomputed', 'color'),
+    Output('button-upload-precomputed', 'children')],
     [Input('upload-precomputed', 'contents')],
     [State('upload-precomputed', 'filename'),
     State('drop-x-column', 'options'),
@@ -996,7 +989,10 @@ def read_tsne(contents, filename, xcol, ycol, idcol, grcol):
         'Select column',
         'Select column',
         'Select column',
-        'Select column'
+        'Select column',
+        False,
+        'success',
+        filename
     )
 
 @app.callback(
