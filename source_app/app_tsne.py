@@ -28,8 +28,12 @@ import argparse
 import json
 import plotly.express as px
 from tooltips import make_tooltips
+import io
+import base64
+import os
+import warnings
 
-#Todo: ID upload, selection hover/click mode, correct centering and dashed lines when time is not increasing 1 by 1
+#TODO: selection hover/click mode
 def parseArguments_overlay():
     parser = argparse.ArgumentParser(description='Project the CNN features with tSNE and browse interactively.')
     parser.add_argument('-m', '--model', help='str, path to the model file', type=str)
@@ -95,6 +99,19 @@ measurement = data.detect_groups_times()['groups'] if measurement is None else m
 start_time = data.detect_groups_times()['times'][0] if start_time is None else start_time
 end_time = data.detect_groups_times()['times'][1] if end_time is None else end_time
 data.subset(sel_groups=measurement, start_time=start_time, end_time=end_time)
+
+# Check that the measurements columns are numeric, if not try to convert to float64
+cols_to_check = '^(?:{})'.format('|'.join(measurement))  # ?: for non-capturing group
+cols_to_check = data.dataset.columns.values[data.dataset.columns.str.contains(cols_to_check)]
+cols_to_change = [(s,t) for s,t in zip(cols_to_check, data.dataset.dtypes[cols_to_check]) if not pd.api.types.is_numeric_dtype(data.dataset[s])]
+if len(cols_to_change) > 0:
+    warnings.warn('Some measurements columns are not of numeric type. Attempting to convert the columns to float64 type. List of problematic columns: {}'.format(cols_to_change))
+    try:
+        cols_dict = {s[0]:'float64' for s in cols_to_change}
+        data.dataset = data.dataset.astype(cols_dict)
+    except ValueError:
+        warnings.warn('Conversion to float failed for at least one column.')
+
 data.get_stats()
 if selected_classes is not None:
     data.dataset = data.dataset[data.dataset[data.col_class].isin(selected_classes)]
@@ -296,6 +313,7 @@ card_tsne = dbc.Card(
         ),
     ],
     body = True,
+    id = 'card-tsne'
 )
 
 card_tsne_params = dbc.Card(
@@ -337,7 +355,8 @@ card_tsne_params = dbc.Card(
             ]
         ),
     ],
-    body = True
+    body = True,
+    id = 'card-tsne-params'
 )
 
 card_tsne_params_advanced = dbc.Card(
@@ -527,6 +546,72 @@ card_plot = dbc.Card(
     body = True
 )
 
+card_load_precomputed = dbc.Card(
+    [   
+        dcc.Upload(
+            id='upload-precomputed',
+            children=dbc.Button(children='Upload .csv file',
+                                outline=True,
+                                color='primary',
+                                id='button-upload-precomputed'),
+            # TODO: add "xlrd" and "odfpy" dependencies to conda env to read Excel and ODT files
+            # accept=['.csv', '.xls', '.xlsx', '.xlsm', '.xlsb', '.odf', '.ods', '.odt']
+            accept=['.csv']
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('X coordinates column:'),
+                dcc.Dropdown(
+                    id='drop-x-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Y coordinates column:'),
+                dcc.Dropdown(
+                    id='drop-y-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('ID column:'),
+                dcc.Dropdown(
+                    id='drop-id-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Group column:'),
+                dcc.Dropdown(
+                    id='drop-group-column',
+                    options=[{'label': 'placeholder', 'value': '__'}],
+                    clearable=False,
+                    disabled=True,
+                    placeholder='Upload first'
+                )
+            ]
+        )
+    ],
+    body=True,
+    style={'display': 'none'},  # hide upon booting up
+    id = 'card-load-precomputed'
+)
+
 
 button_collapse = dbc.Button(
                     'Fold parameters menu \u25BE',
@@ -537,7 +622,13 @@ button_collapse = dbc.Button(
 check_collapse_advanced = dcc.Checklist(
     id='check-advanced',
     value = [],
-    options=[{'label': ' Show advanced TSNE options', 'value': True}]
+    options=[{'label': ' Show advanced tSNE options', 'value': True}]
+)
+
+check_precomputed = dcc.Checklist(
+    id='check-precomputed',
+    value = [],
+    options=[{'label': ' Load precomputed tSNE','value': True},]
 )
 
 button_submit = html.Div(
@@ -551,10 +642,24 @@ button_submit = html.Div(
             '\u21BB Run t-SNE',
             id='submit-tsne',
             n_clicks=0,
-            color='primary'
+            color='primary',
         )
     ],
+    id='div-submit-button',
     style={'display': 'inline-block'}  # center the button and the spinner
+)
+
+button_load = html.Div(
+    [
+        dbc.Button(
+            '\u21BB Load t-SNE',
+            id='button-load-tsne',
+            n_clicks=0,
+            color='success',
+        )
+    ],
+    id='div-load-button',
+    style={'display': 'none'}  # center the button and the spinner
 )
 
 button_export = dbc.Button(
@@ -587,10 +692,14 @@ app.layout = dbc.Container(
         # Hidden division used to store the tSNE coordinates, this way can
         # update the plot appearance without recomputing the tSNE
         html.Div(id='hidden-tsne', style={'display': 'none'}),
+        # Hidden division used to store upload content
+        html.Div(id='hidden-upload-raw', style={'display': 'none'}),
+        html.Div(id='hidden-upload-ready', style={'display': 'none'}),
         dbc.Row(
             [
                 dbc.Col(button_collapse, width=2),
-                dbc.Col(check_collapse_advanced, width=2)
+                dbc.Col(check_collapse_advanced, width=2),
+                dbc.Col(check_precomputed, width=2)
             ],
             align='center',
             justify='start',
@@ -601,19 +710,24 @@ app.layout = dbc.Container(
                     dbc.Col(
                         dbc.CardDeck(
                             [
+                                card_load_precomputed,
                                 card_tsne,
                                 card_tsne_params,
                                 card_overlay,
                                 card_scatterplot,
                                 card_plot
-                            ]
+                            ],
+                            id='main_deck'
                         ),
                         width = 10
                     ),
                     dbc.Col(
-                        button_submit,
+                        [
+                            button_submit,
+                            button_load
+                        ],
                         width = 2
-                    )
+                    ),
                 ],
                 align='end',
                 justify='start',
@@ -671,9 +785,9 @@ app.layout = dbc.Container(
 # ----------------------------------------------------------------------------------------------------------------------
 # Collapse menu with parameters
 @app.callback(
-    Output("collapse", "is_open"),
-    [Input("collapse-button", "n_clicks")],
-    [State("collapse", "is_open")],
+    Output('collapse', 'is_open'),
+    [Input('collapse-button', 'n_clicks')],
+    [State('collapse', 'is_open')],
 )
 def toggle_collapse(n, is_open):
     if n:
@@ -683,14 +797,33 @@ def toggle_collapse(n, is_open):
 # ----------------------------------------------------------------------------------------------------------------------
 # Collapse menu with advanced options
 @app.callback(
-    Output("collapse-advanced", "is_open"),
-    [Input("check-advanced", "value")]
+    Output('collapse-advanced', 'is_open'),
+    [Input('check-advanced', 'value')]
 )
 def toggle_collapse_advanced(checkval):
     if checkval:
         return True
     else:
         return False
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Change menu of parameters for loading precomputed tSNE
+@app.callback(
+    [
+        Output('card-tsne', 'style'),
+        Output('card-tsne-params', 'style'),
+        Output('div-submit-button', 'style'),
+        Output('card-load-precomputed', 'style'),
+        Output('div-load-button', 'style')
+    ],
+    [Input('check-precomputed', 'value')]
+)
+def toggle_precomputed(checkval):
+    if checkval:
+        return {'display': 'none'}, {'display': 'none'}, {'display': 'none'}, {}, {'display': 'inline-block'}
+    else:
+        return {}, {}, {'display': 'inline-block'}, {'display': 'none'}, {'display': 'none'}
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Disable dropdowns of CAMs/backprop if no overlay selected
@@ -788,12 +921,140 @@ def change_alpha(prototypes):
     else:
         return 0.25
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Read t-SNE coordinates from a file and store the table in a hidden division, also set values in dropdowns
+@app.callback(
+    [Output('hidden-upload-raw', 'children'),
+    Output('drop-x-column', 'options'),
+    Output('drop-y-column', 'options'),
+    Output('drop-id-column', 'options'),
+    Output('drop-group-column', 'options'),
+    Output('drop-x-column', 'disabled'),
+    Output('drop-y-column', 'disabled'),
+    Output('drop-id-column', 'disabled'),
+    Output('drop-group-column', 'disabled'),
+    Output('drop-x-column', 'placeholder'),
+    Output('drop-y-column', 'placeholder'),
+    Output('drop-id-column', 'placeholder'),
+    Output('drop-group-column', 'placeholder'),
+    Output('button-upload-precomputed', 'outline'),
+    Output('button-upload-precomputed', 'color'),
+    Output('button-upload-precomputed', 'children'),
+    Output('drop-x-column', 'value'),
+    Output('drop-y-column', 'value'),
+    Output('drop-id-column', 'value'),
+    Output('drop-group-column', 'value')],
+    [Input('upload-precomputed', 'contents')],
+    [State('upload-precomputed', 'filename'),
+    State('drop-x-column', 'options'),
+    State('drop-y-column', 'options'),
+    State('drop-id-column', 'options'),
+    State('drop-group-column', 'options')]
+)
+def read_tsne(contents, filename, xcol, ycol, idcol, grcol):
+    # Do nothing when no file loaded (avoid error at initialization)
+    if contents is None:
+        plchldr = 'Upload first'
+        return (
+            None,
+            xcol,
+            ycol,
+            idcol,
+            grcol,
+            True,
+            True,
+            True,
+            True,
+            plchldr,
+            plchldr,
+            plchldr,
+            plchldr
+        )
+
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    file_name, file_extension = os.path.splitext(filename)
+    try:
+        if file_extension == '.csv':
+            # Assume that the user uploaded a CSV file
+            df = pd.read_csv(
+                io.StringIO(decoded.decode('utf-8')))
+        # TODO: add "xlrd" and "odfpy" dependencies to conda env to read Excel and ODT files
+        # elif file_extension in ['.xls', '.xlsx', '.xlsm', '.xlsb', '.odf', '.ods', '.odt']:
+        #     # Assume that the user uploaded an excel file
+        #     print('try to read excel')
+        #     df = pd.read_excel(io.BytesIO(decoded))
+    except Exception as e:
+        print(e)
+        return html.Div([
+            'There was an error processing this file.'
+        ])
+
+    toStore = df.to_dict(orient='list')
+    colnames = list(df.columns)
+    dict_colnames = [{'label':col, 'value': col} for col in colnames]
+
+    # Automatically fill in recognized column names
+    # recognized_colnames = {
+    #     'xcol': ['xTSNE'],
+    #     'ycol': ['yTSNE'],
+    #     'idcol': ['ID'],
+    #     'grcol': ['Class']
+    # }
+    prefilled_columns = {}
+    prefilled_columns['xcol'] = 'xTSNE' if 'xTSNE' in colnames else ''
+    prefilled_columns['ycol'] = 'yTSNE' if 'yTSNE' in colnames else ''
+    prefilled_columns['idcol'] = 'ID' if 'ID' in colnames else ''
+    prefilled_columns['grcol'] = 'Class' if 'Class' in colnames else ''
+
+    return (
+        json.dumps(toStore),
+        dict_colnames,
+        dict_colnames,
+        dict_colnames,
+        dict_colnames,
+        False,
+        False,
+        False,
+        False,
+        'Select column',
+        'Select column',
+        'Select column',
+        'Select column',
+        False,
+        'success',
+        filename,
+        prefilled_columns['xcol'],
+        prefilled_columns['ycol'],
+        prefilled_columns['idcol'],
+        prefilled_columns['grcol']
+    )
+
+@app.callback(
+    Output('hidden-upload-ready', 'children'),
+    [Input('hidden-upload-raw', 'children'),
+    Input('drop-x-column', 'value'),
+    Input('drop-y-column', 'value'),
+    Input('drop-id-column', 'value'),
+    Input('drop-group-column', 'value')]
+)
+def prepare_for_tsne(contents, xcol, ycol, idcol, grcol):
+    if (contents is None) or any(map(lambda x: x is None, [xcol, ycol, idcol, grcol])):
+        return None
+    dict_load = json.loads(contents)
+    tsne_coord = [[x,y] for x,y in zip(dict_load[xcol], dict_load[ycol])]
+    labels, ids = dict_load[grcol], dict_load[idcol]
+    toStore = {'tsne_coord': tsne_coord, 'labels': labels, 'ids': ids}
+    return json.dumps(toStore)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Compute t-SNE coordinates and store them in a hidden division for sharing between callbacks
 @app.callback(
     [Output('hidden-tsne', 'children'),
      Output('loading-tsne', 'children')],
-    [Input('submit-tsne', 'n_clicks')],
+    [Input('submit-tsne', 'n_clicks'),
+    Input('button-load-tsne', 'n_clicks')],
     [State('drop-layer', 'value'),
      State('drop-init', 'value'),
      State('drop-ndim', 'value'),
@@ -801,15 +1062,24 @@ def change_alpha(prototypes):
      State('input-perp', 'value'),
      State('input-niter', 'value'),
      State('input-exaggeration', 'value'),
-     State('drop-distance', 'value')]
+     State('drop-distance', 'value'),
+     State('hidden-upload-ready', 'children')]
 )
-def compute_tsne(n_clicks, layer, init, ndim, lrate, perp, n_iter, exagg, metr):
-    globals()
-    tsne_coord, labels, ids = tsne(model=net, dataloader=mydataloader, device=device, layer_feature=layer,
-                                   ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter, exag=exagg, metric=metr)
-    # Need to convert numpy arrays to list for JSON conversion
-    toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
-    return json.dumps(toStore), None
+def compute_tsne(n_clicks, n_clicks_load, layer, init, ndim, lrate, perp, n_iter, exagg, metr, loaded_tsne):
+    # Determine which button was clicked
+    ctx = dash.callback_context
+    button_triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    # Upon initilization, run as if clicked submit-tsne button
+    if (not ctx.triggered) or (button_triggered == 'submit-tsne'):
+        globals()
+        tsne_coord, labels, ids = tsne(model=net, dataloader=mydataloader, device=device, layer_feature=layer,
+                                    ncomp=ndim, ini=init, perplex=perp, lr=lrate, niter=n_iter, exag=exagg, metric=metr)
+        # Need to convert numpy arrays to list for JSON conversion
+        toStore = {'tsne_coord': tsne_coord.tolist(), 'labels': labels.tolist(), 'ids': ids.tolist()}
+        out = json.dumps(toStore)
+    elif button_triggered == 'button-load-tsne':
+        out = loaded_tsne
+    return out, None
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Plot t-SNE embedding
