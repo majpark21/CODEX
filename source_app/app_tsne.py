@@ -31,6 +31,7 @@ from tooltips import make_tooltips
 import io
 import base64
 import os
+import warnings
 
 #TODO: selection hover/click mode
 def parseArguments_overlay():
@@ -98,6 +99,19 @@ measurement = data.detect_groups_times()['groups'] if measurement is None else m
 start_time = data.detect_groups_times()['times'][0] if start_time is None else start_time
 end_time = data.detect_groups_times()['times'][1] if end_time is None else end_time
 data.subset(sel_groups=measurement, start_time=start_time, end_time=end_time)
+
+# Check that the measurements columns are numeric, if not try to convert to float64
+cols_to_check = '^(?:{})'.format('|'.join(measurement))  # ?: for non-capturing group
+cols_to_check = data.dataset.columns.values[data.dataset.columns.str.contains(cols_to_check)]
+cols_to_change = [(s,t) for s,t in zip(cols_to_check, data.dataset.dtypes[cols_to_check]) if not pd.api.types.is_numeric_dtype(data.dataset[s])]
+if len(cols_to_change) > 0:
+    warnings.warn('Some measurements columns are not of numeric type. Attempting to convert the columns to float64 type. List of problematic columns: {}'.format(cols_to_change))
+    try:
+        cols_dict = {s[0]:'float64' for s in cols_to_change}
+        data.dataset = data.dataset.astype(cols_dict)
+    except ValueError:
+        warnings.warn('Conversion to float failed for at least one column.')
+
 data.get_stats()
 if selected_classes is not None:
     data.dataset = data.dataset[data.dataset[data.col_class].isin(selected_classes)]
