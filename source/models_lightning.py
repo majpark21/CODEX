@@ -4,6 +4,9 @@ from torch.nn.functional import softmax
 import pytorch_lightning as pl
 import torchmetrics
 from train_utils import accuracy, AverageMeter
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
 
 class LitConvNetCam(pl.LightningModule):
 
@@ -137,12 +140,23 @@ class LitConvNetCam(pl.LightningModule):
         self.log('MeanEpoch/val_acc', val_acc, on_epoch=True, prog_bar=True)
         self.log('MeanEpoch/val_f1', val_f1, on_epoch=True)
         self.log('hp/val_acc', val_acc)
-        return {'loss': val_loss}
+        return {'loss': val_loss, 'preds': prediction, 'target': label}
 
     # This hook receive the outputs of all validation steps as a list of dictionaries
     def validation_epoch_end(self, val_outputs):
         mean_loss = torch.stack([x['loss'] for x in val_outputs]).mean()
+        # Create a figure of the confmat that is loggable
+        preds = torch.cat([softmax(x['preds'], dim=1) for x in val_outputs])
+        target = torch.cat([x['target'] for x in val_outputs])
+        confmat = torchmetrics.functional.confusion_matrix(preds, target, normalize=None, num_classes=self.nclass)
+        df_confmat = pd.DataFrame(confmat.cpu().numpy(), index = range(self.nclass), columns = range(self.nclass))
+        plt.figure(figsize = (10,7))
+        fig_ = sns.heatmap(df_confmat, annot=True, cmap='Blues').get_figure()
+        plt.close(fig_)
+
         self.log('MeanEpoch/val_loss', mean_loss)
+        self.logger.experiment.add_figure("Confusion matrix", fig_, self.current_epoch)
+
 
     def get_progress_bar_dict(self):
         # don't show the version number
