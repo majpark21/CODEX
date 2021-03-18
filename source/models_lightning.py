@@ -7,7 +7,7 @@ from train_utils import accuracy, AverageMeter
 
 class LitConvNetCam(pl.LightningModule):
 
-    def __init__(self, batch_size, lr_scheduler_milestones, lr_gamma, loss=torch.nn.CrossEntropyLoss(), nclass=7, nfeatures=20, length=120, lr=1e-2, L2_reg=1e-3, top_acc=1):
+    def __init__(self, batch_size, lr_scheduler_milestones, lr_gamma, nclass, nfeatures, length, lr=1e-2, L2_reg=1e-3, top_acc=1, loss=torch.nn.CrossEntropyLoss()):
         super().__init__()
 
         self.batch_size = batch_size
@@ -23,6 +23,17 @@ class LitConvNetCam(pl.LightningModule):
         self.lr_scheduler_milestones = lr_scheduler_milestones
         self.lr_gamma = lr_gamma
         self.L2_reg = L2_reg
+
+        # Log hyperparams (all arguments are logged by default)
+        self.save_hyperparameters(
+            'length',
+            'nfeatures',
+            'L2_reg',
+            'lr',
+            'lr_gamma',
+            'lr_scheduler_milestones',
+            'batch_size'
+        )
 
         # Metrics to log
         if not top_acc < nclass:
@@ -80,6 +91,10 @@ class LitConvNetCam(pl.LightningModule):
         }
         return [optimizer], [lr_scheduler]
 
+    def on_train_start(self):
+        # Add mean accuracies per epoch to the hyperparam Tensorboard's tab
+        self.logger.log_hyperparams(self.hparams, {'hp/train_acc': 0, 'hp/val_acc': 0})
+
     def training_step(self, batch, batch_idx):
         series, label = batch['series'], batch['label']
         series = series.view(self.input_size)
@@ -100,10 +115,13 @@ class LitConvNetCam(pl.LightningModule):
     # This hook receive the outputs of all training steps as a list of dictionaries
     def training_epoch_end(self, train_outputs):
         mean_loss = torch.stack([x['loss'] for x in train_outputs]).mean()
+        train_acc = self.train_acc.compute()
+        train_f1 = self.train_f1.compute()
         self.log('MeanEpoch/train_loss', mean_loss)
         # The .compute() of Torchmetrics objects compute the average of the epoch and reset for next one
-        self.log('MeanEpoch/train_acc', self.train_acc.compute())
-        self.log('MeanEpoch/train_f1', self.train_f1.compute())
+        self.log('MeanEpoch/train_acc', train_acc)
+        self.log('MeanEpoch/train_f1', train_f1)
+        self.log('hp/train_acc', train_acc)
 
     def validation_step(self, batch, batch_idx):
         series, label = batch['series'], batch['label']
@@ -118,6 +136,7 @@ class LitConvNetCam(pl.LightningModule):
         val_f1 = self.val_f1(softmax(prediction, dim=1), label)
         self.log('MeanEpoch/val_acc', val_acc, on_epoch=True, prog_bar=True)
         self.log('MeanEpoch/val_f1', val_f1, on_epoch=True)
+        self.log('hp/val_acc', val_acc)
         return {'loss': val_loss}
 
     # This hook receive the outputs of all validation steps as a list of dictionaries
