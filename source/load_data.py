@@ -166,6 +166,32 @@ class DataProcesser:
                     out['times_pergroup'][group] = [min(group_times), max(group_times)]
         return out
 
+    def get_max_common_length(self, return_group=False):
+        """
+        Get the maximum common length of all trajectories, without the NAs tails.
+        """
+        def get_length_without_na(series, cols):
+            series = np.array(series.loc[cols]).astype('float')
+            len_wihtout_na = np.where(~np.isnan(series))[0].size
+            return len_wihtout_na
+        # Get measurement columns, make a distinction between each measurement group
+        colnames = list(self.dataset.columns.values)
+        colnames.remove(self.col_id)
+        colnames.remove(self.col_class)
+        # Determine the max common length independently for each measurement group
+        groups = list(OrderedDict.fromkeys([i.split('_')[0] for i in colnames]))
+        groups_min = {}
+        for group in groups:
+            group_cols = [i for i in colnames if search('^{0}_'.format(group), i)]
+            df_len = self.dataset.apply(get_length_without_na, args=(group_cols,), axis = 1)
+            groups_min[group] = df_len.min()
+        mini_v = min(groups_min.values()) 
+        mini_k = [k for k in groups_min if groups_min[k] == mini_v]
+        if return_group:
+            return (mini_k, mini_v)
+        else:
+            return int(mini_v)
+
 
     def subset(self, sel_groups=None, start_time=None, end_time=None):
         """
@@ -469,8 +495,8 @@ class DataProcesser:
         """
         if not self.flag_subset:
             warnings.warn('Data were not subset.')
-        if not self.flag_process:
-            warnings.warn('Data were not processed.')
+        if self.flag_process:
+            warnings.warn('Data were already preprocessed, be careful not to process again with dataloaders.')
         if not which in ['dataset', 'dataset_cropped']:
             raise ValueError('which must be one of ["dataset", "dataset_cropped]')
         ids_train = list(self.id_set[self.id_set[self.col_set] == 'train'][self.col_id])

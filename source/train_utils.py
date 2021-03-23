@@ -1,4 +1,5 @@
 import torch.nn as nn
+import numpy as np
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -43,3 +44,8 @@ def follow_shape(model):
     for i in model.features.modules():
         if isinstance(i, nn.Conv2d) or isinstance(i, nn.Conv1d):
             i.register_forward_hook(hook_shape)
+
+def even_intervals(nepochs, ninterval=1):
+    """Divide a number of epochs into regular intervals."""
+    out = list(np.linspace(0, nepochs, num=ninterval, endpoint=False, dtype=int))[1:]
+    return out
