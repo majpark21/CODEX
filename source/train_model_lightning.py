@@ -28,10 +28,6 @@ from models import ConvNetCam, ConvNetCamBi
 from models_lightning import LitConvNetCam, LitConvNetCamBi
 from class_dataset import myDataset, ToTensor, Subtract, RandomShift, RandomNoise, RandomCrop, FixedCrop
 
-# For reproducibility
-myseed = 7
-pl.utilities.seed.seed_everything(myseed)
-
 # %% Train
 def makeParser():
     parser = argparse.ArgumentParser(description='Train a ConvNetCam model with Adam optimizer and MultiStep learning rate reduction.')
@@ -55,10 +51,12 @@ def makeParser():
     parser.add_argument('--ngpu', help='Number of GPU to use for training. 0 means CPU-only; -1 means all available GPU. Default: -1.', type=int, default=-1)
 
     parser.add_argument('--logdir', help='Path to directory where to store the logs and the models. Default: "./logs/"', type=str, default='./logs/')
+    parser.add_argument('--seed', help='Seed random numbers for reproducibility. Default: 7.', type=int, default=7)
     # Add the flags of pytorch_lightning trainer
     parser = pl.Trainer.add_argparse_args(parser)
 
     return parser
+
 
 def makeLogger(args, dir_logs='logs/', subdir_logs='sublogs/', file_logs=None):
     file_data = os.path.splitext(os.path.basename(args.data))[0]  # file name without extension
@@ -198,6 +196,7 @@ def main(config_model, config_trainer, train_loader, validation_loader, nmeasure
 if __name__ == '__main__':
     parser = makeParser()
     args = parser.parse_args()
+    pl.utilities.seed.seed_everything(args.seed)
     config_model, config_data, config_trainer = makeConfigs(args)
 
     loaders = makeLoaders(
