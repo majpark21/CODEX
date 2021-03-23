@@ -100,7 +100,7 @@ def makeConfigs(args):
 
     # Add the flags of pytorch_lightning trainer, so can use any option of pl
     custom_keys = ['length', 'nclass', 'nfeatures','batch', 'lr', 'schedule',
-     'gamma', 'penalty', 'data', 'measurement', 'startTime', 'endTime', 'ngpu', 'nepochs', 'logdir']
+     'gamma', 'penalty', 'data', 'measurement', 'startTime', 'endTime', 'ngpu', 'nepochs', 'logdir', 'seed']
     pl_keys = set(dargs.keys()).difference(custom_keys)
     config_trainer = {k:dargs[k] for k in pl_keys}
     # Overwrite the default with manually passed values
