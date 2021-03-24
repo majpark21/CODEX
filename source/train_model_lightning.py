@@ -180,7 +180,7 @@ def makeLoaders(args, return_nclass=False, return_length=False, return_measureme
     return out
 
 
-def main(config_model, config_trainer, train_loader, validation_loader, nmeasurement):
+def main(config_model, config_trainer, train_loader, validation_loader, nmeasurement, file_model):
     if nmeasurement == 1:
         model = LitConvNetCam(**config_model)
     elif nmeasurement == 2:
@@ -191,6 +191,7 @@ def main(config_model, config_trainer, train_loader, validation_loader, nmeasure
     model.double()
     trainer = pl.Trainer(**config_trainer)
     trainer.fit(model, train_loader, validation_loader)
+    torch.save(model, file_model)
 
 
 if __name__ == '__main__':
@@ -218,6 +219,8 @@ if __name__ == '__main__':
         dir_logs=args.logdir,
         subdir_logs='_'.join(measurement)
     )
+    # Save the final model in a pytorch format
+    file_model = mylogger.log_dir + '.pytorch'
 
     # Update the defaults
     update_model = {}
@@ -240,6 +243,6 @@ if __name__ == '__main__':
     config_trainer.update(update_trainer)
 
     t0 = time.time()
-    main(config_model, config_trainer, train_loader, validation_loader, nmeasurement=len(measurement))
+    main(config_model, config_trainer, train_loader, validation_loader, nmeasurement=len(measurement), file_model=file_model)
     t1 = time.time()
     print('Elapsed time: {:.2f} min'.format((t1 - t0)/60))

@@ -35,7 +35,8 @@ class LitConvNetCam(pl.LightningModule):
             'lr',
             'lr_gamma',
             'lr_scheduler_milestones',
-            'batch_size'
+            'batch_size',
+            'nclass'
         )
 
         # Metrics to log
@@ -191,7 +192,8 @@ class LitConvNetCamBi(pl.LightningModule):
             'lr',
             'lr_gamma',
             'lr_scheduler_milestones',
-            'batch_size'
+            'batch_size',
+            'nclass'
         )
 
         # Metrics to log
