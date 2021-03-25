@@ -25,6 +25,7 @@ path_to_module = '../source'  # Path where all the .py files are, relative to th
 sys.path.append(path_to_module)
 from load_data import DataProcesser
 from train_utils import accuracy, AverageMeter, even_intervals
+from utils import get_label_forImbaSampler
 from models import ConvNetCam, ConvNetCamBi
 from models_lightning import LitConvNetCam, LitConvNetCamBi
 from class_dataset import myDataset, ToTensor, Subtract, RandomShift, RandomNoise, RandomCrop, FixedCrop
@@ -196,10 +197,6 @@ def makeLoaders(args, return_nclass=False, return_length=False, return_measureme
     if return_length:
         out['length'] = length
     return out
-
-def get_label_forImbaSampler(dataset, idx):
-    #callback function used in imbalanced dataset loader.
-    return int(dataset[idx]['label'])
 
 
 def main(config_model, config_trainer, train_loader, validation_loader, nmeasurement, file_model):
