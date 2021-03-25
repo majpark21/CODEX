@@ -16,8 +16,9 @@ import seaborn as sns
 import pandas as pd
 import warnings
 import sys
-
 import argparse
+from torchsampler import ImbalancedDatasetSampler
+
 
 # Custom functions/classes
 path_to_module = '../source'  # Path where all the .py files are, relative to the notebook folder
@@ -49,9 +50,16 @@ def makeParser():
     # For the trainer
     parser.add_argument('-e', '--nepochs', help='Number of training epochs. Default: 3.', type=int, default=3)
     parser.add_argument('--ngpu', help='Number of GPU to use for training. 0 means CPU-only; -1 means all available GPU. Default: -1.', type=int, default=-1)
-
+    parser.add_argument('--ncpuLoad', help='Number of CPU cores to use for loading the data before passing to the model. Default: 1.', type=int, default=1)
+    # Logs and reproducibility
     parser.add_argument('--logdir', help='Path to directory where to store the logs and the models. Default: "./logs/"', type=str, default='./logs/')
     parser.add_argument('--seed', help='Seed random numbers for reproducibility. Default: 7.', type=int, default=7)
+    # Handle boolean argument
+    imba_parser = parser.add_mutually_exclusive_group(required=False)
+    imba_parser.add_argument('--imba', dest='imba', action='store_true', help='If the option is passed, correct for imbalanced data (i.e. a dataset where the number of individuals between the classes is not well-balanced). This will over-sample the underrepresented class and under-sample the overrepresented classes. See `https://github.com/ufoym/imbalanced-dataset-sampler`. Default: False.')
+    imba_parser.add_argument('--no-imba', dest='imba', action='store_false')
+    parser.set_defaults(imba=False)
+
     # Add the flags of pytorch_lightning trainer
     parser = pl.Trainer.add_argparse_args(parser)
 
@@ -100,7 +108,7 @@ def makeConfigs(args):
 
     # Add the flags of pytorch_lightning trainer, so can use any option of pl
     custom_keys = ['length', 'nclass', 'nfeatures','batch', 'lr', 'schedule',
-     'gamma', 'penalty', 'data', 'measurement', 'startTime', 'endTime', 'ngpu', 'nepochs', 'logdir', 'seed']
+     'gamma', 'penalty', 'data', 'measurement', 'startTime', 'endTime', 'ngpu', 'nepochs', 'logdir', 'seed', 'imba', 'no-imba', 'ncpuLoad']
     pl_keys = set(dargs.keys()).difference(custom_keys)
     config_trainer = {k:dargs[k] for k in pl_keys}
     # Overwrite the default with manually passed values
@@ -147,19 +155,29 @@ def makeLoaders(args, return_nclass=False, return_length=False, return_measureme
     if nclass != nclass_data:
         warnings.warn('The number of classes in the model output ({}) is not equal to the number of classes in the data ({}).'.format(nclass, nclass_data))
 
-    train_loader = DataLoader(
-        dataset=data_train,
-        batch_size=args.batch,
-        shuffle=True,
-        num_workers=1,
-        drop_last=True
-    )
+    if args.imba:
+        print('Attempting to handle classes imbalance.')
+        train_loader = DataLoader(
+            dataset=data_train,
+            batch_size=args.batch,
+            sampler=ImbalancedDatasetSampler(data_train, callback_get_label=get_label_forImbaSampler),
+            num_workers=args.ncpuLoad,
+            drop_last=True
+        )
+    else:
+        train_loader = DataLoader(
+            dataset=data_train,
+            batch_size=args.batch,
+            shuffle=True,
+            num_workers=args.ncpuLoad,
+            drop_last=True
+        )
 
     validation_loader = DataLoader(
         dataset=data_validation,
         batch_size=args.batch,
         shuffle=False,
-        num_workers=1,
+        num_workers=args.ncpuLoad,
         drop_last=True
     )
 
@@ -178,6 +196,10 @@ def makeLoaders(args, return_nclass=False, return_length=False, return_measureme
     if return_length:
         out['length'] = length
     return out
+
+def get_label_forImbaSampler(dataset, idx):
+    #callback function used in imbalanced dataset loader.
+    return int(dataset[idx]['label'])
 
 
 def main(config_model, config_trainer, train_loader, validation_loader, nmeasurement, file_model):
@@ -246,3 +268,5 @@ if __name__ == '__main__':
     main(config_model, config_trainer, train_loader, validation_loader, nmeasurement=len(measurement), file_model=file_model)
     t1 = time.time()
     print('Elapsed time: {:.2f} min'.format((t1 - t0)/60))
+
+# %%
