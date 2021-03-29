@@ -265,5 +265,4 @@ if __name__ == '__main__':
     main(config_model, config_trainer, train_loader, validation_loader, nmeasurement=len(measurement), file_model=file_model)
     t1 = time.time()
     print('Elapsed time: {:.2f} min'.format((t1 - t0)/60))
-
-# %%
+    print('Model saved at: {}'.format(file_model))
