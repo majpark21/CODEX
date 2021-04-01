@@ -187,8 +187,8 @@ if export_allPooled:
 print('Patterns extracted and saved.')
 
 #%%
-del store_patts, concat_patts_allPooled, concat_patts, model,\
-    df, selected_data, selected_trajectories, set_trajectories, bincam, bincam_ext, data_loader, series_tensor
+del (store_patts, concat_patts_allPooled, concat_patts, model,\
+    df, selected_data, selected_trajectories, set_trajectories, bincam, bincam_ext, data_loader, series_tensor)
 ######### Build distance matrix between patterns (normalized DTW to length of series, with multivariate support) #######
 if export_perClass:
     for classe in classes:
