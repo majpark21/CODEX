@@ -31,29 +31,31 @@ There are currently 3 main analysis performed in CODEX:
 
 # How to cite us?
 
-If you use CODEX for your  work, please cite the following preprint:
+If you use CODEX for your  work, please cite the following paper:
 ```
-Jacques, M. A., Dobrzynski, M., Gagliardi, P. A., Sznitman, R., & Pertz, O. (2020). CODEX, a neural network approach to explore signaling dynamics landscapes. bioRxiv.
+Jacques, Marc‐Antoine, et al. "CODEX, a neural network approach to explore signaling dynamics landscapes." Molecular Systems Biology 17.4 (2021): e10026.
 ```
-This preprint is available at:
-https://www.biorxiv.org/content/10.1101/2020.08.05.237842v1
+This publication is available in open access at:
+https://www.embopress.org/doi/full/10.15252/msb.202010026
 
 # Getting started
 
-We strongly encourage to use the notebooks to run all analysis, they contain detailed information about each approach and their parameters. We provide two sample datasets along with already trained models for both. We are in the process of cleaning and refactoring all the python files for headless mode. Also, bear in mind that training a CNN in reasonable time requires a dedicated GPU. A CPU-only system will be fine for inference (*i.e.* run CODEX's analysis with an already trained model), but training will be orders of magnitude slower. A consumer-grade, mid-range GPU (*e.g.* Nvidia GTX 1050) is sufficient for most applications.
+If it is the first time you use CODEX, we recommend to use the notebooks to run all analysis. They contain detailed information about each approach and their parameters. We provide two sample datasets along with already trained models for both. Once you grew familiar with the workflow, you probably will find the command line calls more flexible. (Note: At the moment, command-line callable scripts are only available for the training and the companion visualization app; prototype analysis and pattern mining scripts are coming soon.).
+
+Also, bear in mind that training a CNN in reasonable time requires a dedicated GPU. A CPU-only system will be fine for inference (*i.e.* run CODEX's analysis with an already trained model), but training will be orders of magnitude slower. A consumer-grade, mid-range GPU (*e.g.* Nvidia GTX 1050) is sufficient for most applications.
 
 ## Installation
 
-CODEX is mostly written in python and uses the powerful [Pytorch library](https://pytorch.org/) for artificial neural networks. In addition, some helper scripts for the motifs mining analysis are written in R. CODEX was tested on Ubuntu 16, Ubuntu 18, Ubuntu 20 and Windows 10.
+CODEX is written in Python and uses the powerful [Pytorch](https://pytorch.org/) and [Pytorch-lightning](https://www.pytorchlightning.ai/) libraries for artificial neural networks. In addition, some helper scripts for the motifs mining analysis are written in R. CODEX was tested on Ubuntu 16, Ubuntu 18, Ubuntu 20 and Windows 10.
 
 ### Python part
 
-0. Prerequisites: Clone this repository and make sure that you have a recent version of [Anaconda](https://www.anaconda.com) installed (Python 3 required, Python 2 not supported; tested with Python 3.7 and 3.8).
+0. Prerequisites: Clone this repository and make sure that you have a recent version of [Anaconda](https://www.anaconda.com) (Python 3 required, Python 2 not supported; tested with Python 3.7 and 3.8).
 1. From there, you have 2 options to install CODEX's Conda environment depending on your system:
     1. For Windows and Linux users. If you have a compatible GPU and CUDA 10 or CUDA 11 installed, the easiest way is to install the Conda environment with the .yml file provided in this repo. To do so, in command line (or Anaconda prompt on Windows) navigate to the location of the repository and type:
     ```
     # For CUDA 10 or CUDA 11, Windows and Linux only
-    conda env create -f CONDA/CONDA_ENV_CUDA102.yml
+    conda env create -f CONDA/CONDA_ENV_CUDA11-1.yml
     ```  
     2. For OSX users or if you do not have a compatible GPU or if you have CUDA 9, create the Conda environment manually. To do so, follow the instructions in `CONDA/CONDA_ENVmanual.txt`.
 
@@ -63,9 +65,16 @@ conda activate codex
 jupyter notebook
 ```
 
-Follow the next section if you want to use Notebook 3 for clustering CAM-based motifs.
+You can also start to train CNNs without Jupyter's notebooks by directly calling the training script. Here is a minimal example which works for univariate and bivariate inputs:
+```
+python source/train_model.py --data path/to/data/file --nepochs 10 --ngpu 1
+```
+
+Many more options are available to control the CNN inputs, training hyperparameters, handle imbalanced datasets... You can access them with `python source/train_model.py --help`. In addition, all parameters of [Pytorch Lightning's Trainer object](https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html#trainer-flags) can be passed to the script.
 
 ### R part (recommended, only used for the motif mining analysis)
+
+Follow this next section if you want to use Notebook 3 for clustering CAM-based motifs.
 
 A couple of R scripts are used to compute Dynamic Time Warping (DTW) distance and cluster class-specific motifs. These operations are run after the actual extraction of the motifs and are here to help tidying the results for interpretation. This step is optional but recommended. Alternatively, you can write your own pipeline to compute the distance matrix and cluster the motifs from the exported file that contains the motifs.
 
@@ -102,7 +111,7 @@ A typical preprocessing workflow performed on the fly comprises, check the Noteb
 * The removal of the average value, in the training set, from each channel. This is a common preprocessing operation for CNNs.
 
 ## Bundled CNN architecture and adding new architectures
-In CODEX we propose to use a plain, fully-Convolutional architecture that was previously described as a solid baseline for a range of time-series datasets ([Zhou et al. 2015](https://arxiv.org/pdf/1512.04150.pdf); [Wang and Yan 2016](https://arxiv.org/pdf/1611.06455.pdf)). This architecture comprises a cascade of convolution layers, followed by ReLU and batch normalization. After this cascade, the responses to the convolutions are averaged with global average pooling (GAP) which forms a 1D vector representation of the input. We refer to the latter vector as CNN features. It is these features that are then used for classification (with a subsequent fully-conencted layer) and projected for visualization in a low-dimensional space. The model architecture for univariate inputs is defined in the class `ConvNetCam`; for bivariate inputs, it is defined in the class `ConvNetCamBi`. New architectures can be added in `models.py`, for example to handle inputs with more than 2 dimensions.
+In CODEX we propose to use a plain, convolutional architecture that was previously described as a solid baseline for a range of time-series datasets ([Zhou et al. 2015](https://arxiv.org/pdf/1512.04150.pdf); [Wang and Yan 2016](https://arxiv.org/pdf/1611.06455.pdf)). This architecture comprises a cascade of convolution layers, followed by ReLU and batch normalization. After this cascade, the responses to the convolutions are averaged with global average pooling (GAP) which forms a 1D vector representation of the input. We refer to the latter vector as CNN features. It is these features that are then used for classification (with a subsequent fully-conencted layer) and projected for visualization in a low-dimensional space. The model architecture for univariate inputs is defined in the class `LitConvNetCam`; for bivariate inputs, it is defined in the class `LitConvNetCamBi`. New architectures can be added in `models.py`, for example to handle inputs with more than 2 dimensions.
 
 ## Multivariate input
 CODEX can handle multivariate input. See the corresponding sections for formatting the data. We provide 2 models, one for the univariate case and one for the bivariate case, but the input could theoretically be of any dimension. Just be sure to include a new model in the models.py file.
@@ -140,6 +149,8 @@ In case you randomly crop the series to fixed length segments before passing the
 
 
 # References
+
+Jacques, Marc‐Antoine, et al. "CODEX, a neural network approach to explore signaling dynamics landscapes." Molecular Systems Biology 17.4 (2021): e10026.
 
 Wang, Z., Yan, W., & Oates, T. (2017, May). Time series classification from scratch with deep neural networks: A strong baseline. In 2017 International joint conference on neural networks (IJCNN) (pp. 1578-1585). IEEE.
 
