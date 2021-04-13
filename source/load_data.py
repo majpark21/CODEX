@@ -168,7 +168,7 @@ class DataProcesser:
 
     def get_max_common_length(self, return_group=False):
         """
-        Get the maximum common length of all trajectories, without the NAs tails.
+        Get the maximum common length of all trajectories, without the NAs tails. Optionally returns the limiting measurement group.
         """
         def get_length_without_na(series, cols):
             series = np.array(series.loc[cols]).astype('float')
