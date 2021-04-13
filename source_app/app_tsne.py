@@ -1,37 +1,37 @@
-from sklearn.manifold import TSNE
-import numpy as np
+import argparse
+import base64
+import io
+import json
+import os
 import random
+import re
+import warnings
+from copy import deepcopy
+from functools import reduce
+from tkinter import Tk, filedialog
+
 import dash
+import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import dash_html_components as html
-import dash_bootstrap_components as dbc
-import plotly.graph_objs as go
-from dash.dependencies import Input, Output, State
-import torch
-import torch.nn.functional as F
 import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset, DataLoader
-from class_dataset import myDataset, ToTensor, RandomCrop, Subtract
-from load_data import DataProcesser
-from torchvision import transforms
-import re
-from models import ConvNetCamBi
-from copy import copy
-from utils import model_output_app, frange
-from plot_maps import create_cam, create_gbackprop, select_series
-from copy import deepcopy
-from skimage.filters import threshold_li, threshold_mean
-from tkinter import filedialog, Tk
-from functools import reduce
-import argparse
-import json
 import plotly.express as px
+import plotly.graph_objs as go
+import torch
+import torch.nn.functional as F
+from dash.dependencies import Input, Output, State
+from skimage.filters import threshold_li, threshold_mean
+from sklearn.manifold import TSNE
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+
+from class_dataset import RandomCrop, Subtract, ToTensor, myDataset
+from load_data import DataProcesser
+from plot_maps import create_cam, create_gbackprop, select_series
 from tooltips import make_tooltips
-import io
-import base64
-import os
-import warnings
+from utils import frange, get_label_forImbaSampler, model_output_app
+
 
 #TODO: selection hover/click mode
 def parseArguments_overlay():
@@ -149,7 +149,8 @@ for meas in measurement:
     temp['variable'] = temp['variable'].str.replace('_[0-9]+$', '')
     ldf.append(temp)
 df = pd.concat(ldf)
-del temp, ldf
+del temp
+del ldf
 df.sort_values(['ID', 'Time'])
 max_slider = df['value'].max()
 min_slider = df['value'].min()

@@ -113,7 +113,6 @@ def model_output(model, dataloader, export_prob=True, export_feat=True, softmax=
     return df_out
 
 
-#%%
 def tensorboard_to_df(path_to_logs, tags):
     """
     Read tensorboard logs and return a DataFrame with values. Useful for further plotting.
@@ -138,7 +137,6 @@ def tensorboard_to_df(path_to_logs, tags):
     return out
 
 
-# %%
 def visualize_layer(model, layer_idx=0, linkage='average'):
     weights = model.features[layer_idx].cpu().weight.detach().numpy().squeeze()
     nfilt, h ,w = weights.shape
@@ -150,3 +148,8 @@ def visualize_layer(model, layer_idx=0, linkage='average'):
     plt.tight_layout()
     plt.show()
     return None
+
+
+def get_label_forImbaSampler(dataset, idx):
+    #callback function used in imbalanced dataset loader.
+    return int(dataset[idx]['label'])

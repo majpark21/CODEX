@@ -1,18 +1,16 @@
 # If installation through .yml doesn't work or if you are a Mac user or if you want to choose which version of CUDA to use, follow these steps to create CODEX conda environment (python 3.7 or 3.8)
 # In the command line (or Anaconda prompt):
-conda create -n codex
+conda create -n codex -y
 conda activate codex
 
 # Run the line that corresponds to your system (from https://pytorch.org/)
 # OSX 
 # conda install pytorch torchvision -c pytorch
 # Linux and Windows
-# CUDA 9.2 (Linux only)
+# CUDA 10.2
 # conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
-# CUDA 10.1
-# conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
-# CUDA 10.2 (should also work for CUDA 11)
-# conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+# CUDA 11.1 (also tested with CUDA 11.2)
+# conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge
 # CPU only
 # conda install pytorch torchvision cpuonly -c pytorch
 
@@ -23,8 +21,10 @@ conda install seaborn -y
 conda install -c conda-forge tqdm -y
 conda install -c conda-forge scikit-image -y
 conda install scikit-learn -y
-conda install tensorboard
-pip install dash-bootstrap-components
+conda install tensorboard -y
+conda install -c conda-forge pytorch-lightning -y
+conda install -c conda-forge dash-bootstrap-components -y
+pip install git+https://github.com/ufoym/imbalanced-dataset-sampler
 
-# Unavailable on Windows, just used to speed up table reading in DataProcesser. Can proceeed without running this line.
+# Optional. Unavailable on Windows. Only sed to speed up table reading in DataProcesser. Can proceeed without running this line.
 pip install datatable  
