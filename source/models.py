@@ -7,7 +7,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 from functools import partial
-from train_utils import accuracy, AverageMeter
 
 #######################################################################################
 # Up-to-date architectures. Uses pytorch lightning. Original implementations in pure Pytorch at the end of this file
