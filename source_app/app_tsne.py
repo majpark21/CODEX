@@ -686,6 +686,13 @@ dropdown_export = dcc.Dropdown(
     placeholder = 'Select elements to export'
 )
 
+button_exportPDF = dbc.Button(
+            '\u2913 Export PDF',
+            id='button-exportPDF',
+            n_clicks=0,
+            color='primary'
+)
+
 tooltips = make_tooltips()
 
 app.layout = dbc.Container(
@@ -771,12 +778,16 @@ app.layout = dbc.Container(
                     width = 3
                 ),
                 dbc.Col(
+                    button_exportPDF,
+                    width = 1
+                ),
+                dbc.Col(
                     html.Div(id='table-proba'),
                     width = 6
                 )
             ],
             justify = 'between',
-            align = 'center',
+            align = 'end',
             no_gutters = True
         ),
     ] + tooltips,
@@ -1496,6 +1507,30 @@ def export_selection(nclicks, selected_points, curr_style, export_options):
             return button_style
     else:
         return button_style
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Export PDF of the tSNE
+@app.callback(
+    Output('button-exportPDF', 'style'),
+    [Input('button-exportPDF', 'n_clicks')],
+    [State('plot-tsne', 'figure'),
+     State('button-exportPDF', 'style')]
+)
+def export_tSNEPDF(nclicks, fig, curr_style):
+    # Dummy return because callbacks need an output
+    button_style = curr_style
+    if nclicks > 0:        
+        fig_exp = go.Figure()
+        fig_data = fig['data']
+        fig_layout = fig['layout']
+        for ii in fig_data:
+            if ii['type'] == 'scattergl':
+                ii['type'] = 'scatter'
+        fig_exp.add_traces(fig_data)
+        fig_exp.update_layout(fig_layout)
+        fig_exp.write_image("/home/marc/Desktop/image.pdf")
+    return button_style
 
 
 # ----------------------------------------------------------------------------------------------------------------------
