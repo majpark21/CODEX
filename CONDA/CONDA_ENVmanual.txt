@@ -24,6 +24,7 @@ conda install scikit-learn -y
 conda install tensorboard -y
 conda install -c conda-forge pytorch-lightning -y
 conda install -c conda-forge dash-bootstrap-components -y
+conda install -c conda-forge python-kaleido
 pip install git+https://github.com/ufoym/imbalanced-dataset-sampler
 
 # Optional. Unavailable on Windows. Only sed to speed up table reading in DataProcesser. Can proceeed without running this line.
