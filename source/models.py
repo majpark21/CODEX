@@ -21,9 +21,6 @@ class LitConvNetCam(pl.LightningModule):
         self.nfeatures = nfeatures
         self.length = length
 
-        # Add a dummy channel dimension for conv1D layer
-        self.input_size = (batch_size, 1, length)
-
         self.loss = loss
         self.lr = lr
         self.lr_scheduler_milestones = lr_scheduler_milestones
@@ -182,9 +179,6 @@ class LitConvNetCamBi(pl.LightningModule):
         self.nclass = nclass
         self.nfeatures = nfeatures
         self.length = length
-
-        # Add a dummy channel dimension for conv1D layer
-        self.input_size = (batch_size, 1, 2, length)
 
         self.loss = loss
         self.lr = lr
