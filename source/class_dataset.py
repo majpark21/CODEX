@@ -73,6 +73,10 @@ class myDataset(Dataset):
 
         return sample
 
+    # Callback function used in imbalanced dataset loader
+    def get_labels(self):
+        return list(self.dataset[self.col_class].astype(int))
+
     def detect_groups(self):
         colnames = list(self.dataset.columns.values)
         colnames.remove(self.col_id)
