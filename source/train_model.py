@@ -28,8 +28,6 @@ from class_dataset import (FixedCrop, RandomCrop, RandomNoise, RandomShift,
                            Subtract, ToTensor, myDataset)
 from load_data import DataProcesser
 from train_utils import AverageMeter, accuracy, even_intervals
-from utils import get_label_forImbaSampler
-
 
 # %% Train
 def makeParser():
