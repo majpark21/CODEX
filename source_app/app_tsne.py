@@ -60,7 +60,7 @@ def parseArguments_overlay():
                                         'data were irrelevant measurement were acquired. Set to -1 for automatic detection.',
                         type=int, default=-1)
     parser.add_argument('-p', '--port', help='int, port on which to start the application.', type=int, default=8050)
-    parser.add_argument('-h', '--host', help='str, host name for the application. Default to "127.0.0.1".', type=str, default='127.0.0.1')
+    parser.add_argument('--host', help='str, host name for the application. Default to "127.0.0.1".', type=str, default='127.0.0.1')
     args = parser.parse_args()
     return(args)
 
